@@ -466,7 +466,7 @@ bot.on('message', async (msg) => {
       '3. Взаимный лайк = совпадение 💘\n' +
       '4. ИИ покажет совместимость и подскажет первую фразу!\n\n' +
       '/start — главное меню\n\n' +
-      '📞 Поддержка: @connectkg',
+      '📞 Поддержка: @connectkg_support',
       { parse_mode: 'Markdown', ...mainMenu }
     );
   }
