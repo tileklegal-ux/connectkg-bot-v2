@@ -3,30 +3,110 @@ const TelegramBot = require('node-telegram-bot-api');
 const { createClient } = require('@supabase/supabase-js');
 const Groq = require('groq-sdk');
 
-const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET);
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+// ========================
+// ИНИЦИАЛИЗАЦИЯ
+// ========================
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SECRET = process.env.SUPABASE_SECRET;
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const ADMIN_IDS = (process.env.ADMIN_IDS || '').split(',').map(id => parseInt(id)).filter(Boolean);
 
-const ADMIN_IDS = (process.env.ADMIN_IDS || '').split(',').map(id => parseInt(id.trim())).filter(Boolean);
-
-// In-memory state for multi-step flows
-const userState = {};
-
-// ─── helpers ────────────────────────────────────────────────────────────────
-
-function isAdmin(userId) {
-  return ADMIN_IDS.includes(userId);
+if (!BOT_TOKEN || !SUPABASE_URL || !SUPABASE_SECRET) {
+  console.error('❌ Не заданы обязательные переменные окружения: BOT_TOKEN, SUPABASE_URL, SUPABASE_SECRET');
+  process.exit(1);
 }
 
+const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET);
+const groq = GROQ_API_KEY ? new Groq({ apiKey: GROQ_API_KEY }) : null;
+
+console.log('🚀 ConnectKG бот запущен!');
+
+// ========================
+// СОСТОЯНИЯ ПОЛЬЗОВАТЕЛЕЙ
+// ========================
+const userStates = {}; // { userId: { step, data } }
+
+function setState(userId, step, data = {}) {
+  userStates[userId] = { step, data };
+}
+
+function getState(userId) {
+  return userStates[userId] || { step: null, data: {} };
+}
+
+function clearState(userId) {
+  delete userStates[userId];
+}
+
+// ========================
+// БАЗА ДАННЫХ — ПОЛЬЗОВАТЕЛИ
+// ========================
 async function getUser(telegramId) {
   const { data } = await supabase
     .from('users')
     .select('*')
     .eq('telegram_id', telegramId)
-    .maybeSingle();
+    .single();
   return data;
 }
 
+async function createUser(userData) {
+  const { data, error } = await supabase
+    .from('users')
+    .insert([userData])
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function updateUser(telegramId, updates) {
+  const { data, error } = await supabase
+    .from('users')
+    .update(updates)
+    .eq('telegram_id', telegramId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ========================
+// БАЗА ДАННЫХ — ЛАЙКИ И СОВПАДЕНИЯ
+// ========================
+async function addLike(fromId, toId) {
+  await supabase.from('likes').insert([{ from_id: fromId, to_id: toId }]);
+}
+
+async function checkMutualLike(fromId, toId) {
+  const { data } = await supabase
+    .from('likes')
+    .select('*')
+    .eq('from_id', toId)
+    .eq('to_id', fromId)
+    .single();
+  return !!data;
+}
+
+async function hasAlreadyLiked(fromId, toId) {
+  const { data } = await supabase
+    .from('likes')
+    .select('*')
+    .eq('from_id', fromId)
+    .eq('to_id', toId)
+    .single();
+  return !!data;
+}
+
+async function addMatch(user1Id, user2Id) {
+  await supabase.from('matches').insert([{ user1_id: user1Id, user2_id: user2Id }]);
+}
+
+// ========================
+// БАЗА ДАННЫХ — РЕКЛАМА
+// ========================
 async function getRandomAd() {
   const { data } = await supabase
     .from('ads')
@@ -36,571 +116,636 @@ async function getRandomAd() {
   return data[Math.floor(Math.random() * data.length)];
 }
 
-async function sendProfile(chatId, profile, extra = {}) {
-  const genderLabel = profile.gender === 'male' ? 'Мужчина' : 'Женщина';
-  const caption = `👤 *${escMd(profile.name)}*, ${profile.age} лет\n🚻 ${genderLabel}\n📝 ${escMd(profile.about)}`;
-  if (profile.photo_id) {
-    await bot.sendPhoto(chatId, profile.photo_id, {
-      caption,
-      parse_mode: 'Markdown',
-      ...extra,
-    });
-  } else {
-    await bot.sendMessage(chatId, caption, { parse_mode: 'Markdown', ...extra });
-  }
-}
+// ========================
+// АНКЕТЫ ДЛЯ ПРОСМОТРА
+// ========================
+async function getNextProfile(userId) {
+  const currentUser = await getUser(userId);
+  if (!currentUser) return null;
 
-function escMd(text) {
-  return String(text).replace(/[_*[\]()~`>#+\-=|{}.!\\]/g, '\\$&');
-}
+  // Ищем анкеты противоположного пола, которых ещё не лайкали
+  const gender = currentUser.gender === 'мужской' ? 'женский' : 'мужской';
 
-function mainMenuKeyboard() {
-  return {
-    reply_markup: {
-      keyboard: [
-        ['👀 Смотреть анкеты', '❤️ Мои совпадения'],
-        ['✏️ Редактировать анкету', '👤 Моя анкета'],
-      ],
-      resize_keyboard: true,
-    },
-  };
-}
-
-function cancelKeyboard() {
-  return {
-    reply_markup: {
-      keyboard: [['❌ Отмена']],
-      resize_keyboard: true,
-    },
-  };
-}
-
-function adminKeyboard() {
-  return {
-    reply_markup: {
-      keyboard: [
-        ['📊 Статистика', '📢 Рассылка'],
-        ['➕ Добавить рекламу', '📋 Список реклам'],
-        ['❌ Выйти из панели'],
-      ],
-      resize_keyboard: true,
-    },
-  };
-}
-
-// ─── registration flow ───────────────────────────────────────────────────────
-
-async function startRegistration(chatId, userId) {
-  userState[userId] = { step: 'reg_name' };
-  await bot.sendMessage(chatId, '👋 Добро пожаловать в *ConnectKG* — знакомства в Бишкеке!\n\nДавай создадим твою анкету. Как тебя зовут?', {
-    parse_mode: 'Markdown',
-    ...cancelKeyboard(),
-  });
-}
-
-async function handleRegistration(msg) {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  const state = userState[userId];
-  const text = msg.text || '';
-
-  if (text === '❌ Отмена') {
-    delete userState[userId];
-    const user = await getUser(userId);
-    if (user) {
-      await bot.sendMessage(chatId, 'Отменено.', mainMenuKeyboard());
-    } else {
-      await bot.sendMessage(chatId, 'Отменено. Напиши /start чтобы начать заново.', { reply_markup: { remove_keyboard: true } });
-    }
-    return;
-  }
-
-  if (state.step === 'reg_name') {
-    if (!text || text.length < 2) {
-      await bot.sendMessage(chatId, 'Пожалуйста, введи своё настоящее имя (минимум 2 символа).');
-      return;
-    }
-    state.name = text;
-    state.step = 'reg_age';
-    await bot.sendMessage(chatId, '📅 Сколько тебе лет?', cancelKeyboard());
-  } else if (state.step === 'reg_age') {
-    const age = parseInt(text);
-    if (isNaN(age) || age < 18 || age > 80) {
-      await bot.sendMessage(chatId, 'Пожалуйста, введи возраст от 18 до 80.');
-      return;
-    }
-    state.age = age;
-    state.step = 'reg_gender';
-    await bot.sendMessage(chatId, '🚻 Выбери свой пол:', {
-      reply_markup: {
-        keyboard: [['👨 Мужской', '👩 Женский'], ['❌ Отмена']],
-        resize_keyboard: true,
-      },
-    });
-  } else if (state.step === 'reg_gender') {
-    if (text === '👨 Мужской') {
-      state.gender = 'male';
-    } else if (text === '👩 Женский') {
-      state.gender = 'female';
-    } else {
-      await bot.sendMessage(chatId, 'Пожалуйста, выбери пол с помощью кнопок.');
-      return;
-    }
-    state.step = 'reg_about';
-    await bot.sendMessage(chatId, '📝 Расскажи немного о себе (интересы, чем занимаешься):', cancelKeyboard());
-  } else if (state.step === 'reg_about') {
-    if (!text || text.length < 10) {
-      await bot.sendMessage(chatId, 'Напиши чуть больше о себе (минимум 10 символов).');
-      return;
-    }
-    state.about = text;
-    state.step = 'reg_photo';
-    await bot.sendMessage(chatId, '📸 Отправь своё фото для анкеты:', cancelKeyboard());
-  } else if (state.step === 'reg_photo') {
-    if (!msg.photo) {
-      await bot.sendMessage(chatId, 'Пожалуйста, отправь фото.');
-      return;
-    }
-    const photo = msg.photo[msg.photo.length - 1];
-    state.photo_id = photo.file_id;
-
-    const { error } = await supabase.from('users').upsert({
-      telegram_id: userId,
-      name: state.name,
-      age: state.age,
-      gender: state.gender,
-      about: state.about,
-      photo_id: state.photo_id,
-      active: true,
-    }, { onConflict: 'telegram_id' });
-
-    delete userState[userId];
-
-    if (error) {
-      await bot.sendMessage(chatId, 'Ошибка при сохранении анкеты. Попробуй ещё раз через /start.');
-      return;
-    }
-
-    await bot.sendMessage(chatId, '✅ Анкета создана! Теперь можешь смотреть других пользователей.', mainMenuKeyboard());
-  }
-}
-
-// ─── edit profile flow ───────────────────────────────────────────────────────
-
-async function startEditProfile(chatId, userId) {
-  userState[userId] = { step: 'edit_choose' };
-  await bot.sendMessage(chatId, '✏️ Что хочешь изменить?', {
-    reply_markup: {
-      keyboard: [
-        ['📛 Имя', '📅 Возраст'],
-        ['📝 О себе', '📸 Фото'],
-        ['❌ Отмена'],
-      ],
-      resize_keyboard: true,
-    },
-  });
-}
-
-async function handleEditProfile(msg) {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  const state = userState[userId];
-  const text = msg.text || '';
-
-  if (text === '❌ Отмена') {
-    delete userState[userId];
-    await bot.sendMessage(chatId, 'Редактирование отменено.', mainMenuKeyboard());
-    return;
-  }
-
-  if (state.step === 'edit_choose') {
-    if (text === '📛 Имя') {
-      state.step = 'edit_name';
-      await bot.sendMessage(chatId, 'Введи новое имя:', cancelKeyboard());
-    } else if (text === '📅 Возраст') {
-      state.step = 'edit_age';
-      await bot.sendMessage(chatId, 'Введи новый возраст:', cancelKeyboard());
-    } else if (text === '📝 О себе') {
-      state.step = 'edit_about';
-      await bot.sendMessage(chatId, 'Напиши новое описание о себе:', cancelKeyboard());
-    } else if (text === '📸 Фото') {
-      state.step = 'edit_photo';
-      await bot.sendMessage(chatId, 'Отправь новое фото:', cancelKeyboard());
-    }
-    return;
-  }
-
-  let updateData = null;
-
-  if (state.step === 'edit_name') {
-    if (!text || text.length < 2) {
-      await bot.sendMessage(chatId, 'Имя должно быть не менее 2 символов.');
-      return;
-    }
-    updateData = { name: text };
-  } else if (state.step === 'edit_age') {
-    const age = parseInt(text);
-    if (isNaN(age) || age < 18 || age > 80) {
-      await bot.sendMessage(chatId, 'Возраст должен быть от 18 до 80.');
-      return;
-    }
-    updateData = { age };
-  } else if (state.step === 'edit_about') {
-    if (!text || text.length < 10) {
-      await bot.sendMessage(chatId, 'Описание должно быть не менее 10 символов.');
-      return;
-    }
-    updateData = { about: text };
-  } else if (state.step === 'edit_photo') {
-    if (!msg.photo) {
-      await bot.sendMessage(chatId, 'Пожалуйста, отправь фото.');
-      return;
-    }
-    const photo = msg.photo[msg.photo.length - 1];
-    updateData = { photo_id: photo.file_id };
-  }
-
-  if (updateData) {
-    await supabase.from('users').update(updateData).eq('telegram_id', userId);
-    delete userState[userId];
-    await bot.sendMessage(chatId, '✅ Анкета обновлена!', mainMenuKeyboard());
-  }
-}
-
-// ─── browse profiles ─────────────────────────────────────────────────────────
-
-async function browseProfiles(chatId, userId) {
-  const me = await getUser(userId);
-  if (!me) return;
-
-  const oppositeGender = me.gender === 'male' ? 'female' : 'male';
-
-  const { data: likedRows } = await supabase
+  const { data: liked } = await supabase
     .from('likes')
     .select('to_id')
     .eq('from_id', userId);
 
-  const likedIds = (likedRows || []).map(r => r.to_id);
-  likedIds.push(userId);
+  const likedIds = liked ? liked.map(l => l.to_id) : [];
+  likedIds.push(userId); // исключаем себя
 
-  const { data: profiles } = await supabase
+  const { data } = await supabase
     .from('users')
     .select('*')
-    .eq('gender', oppositeGender)
-    .eq('active', true)
-    .not('telegram_id', 'in', `(${likedIds.join(',') || 0})`);
+    .eq('gender', gender)
+    .eq('is_active', true)
+    .not('telegram_id', 'in', `(${likedIds.join(',')})`)
+    .limit(1)
+    .single();
 
-  if (!profiles || profiles.length === 0) {
-    await bot.sendMessage(chatId, '😔 Пока нет новых анкет. Загляни позже!', mainMenuKeyboard());
-    return;
+  return data;
+}
+
+// ========================
+// КЛАВИАТУРЫ
+// ========================
+const mainMenuKeyboard = {
+  reply_markup: {
+    keyboard: [
+      ['❤️ Смотреть анкеты', '👤 Моя анкета'],
+      ['⚙️ Настройки', '❓ Помощь']
+    ],
+    resize_keyboard: true
   }
+};
 
-  const profile = profiles[Math.floor(Math.random() * profiles.length)];
-  userState[userId] = { step: 'browsing', viewingId: profile.telegram_id };
+const registrationGenderKeyboard = {
+  reply_markup: {
+    inline_keyboard: [
+      [{ text: '👨 Я мужчина', callback_data: 'gender_мужской' }],
+      [{ text: '👩 Я женщина', callback_data: 'gender_женский' }]
+    ]
+  }
+};
 
-  await sendProfile(chatId, profile, {
-    reply_markup: {
-      keyboard: [
-        ['❤️ Лайк', '👎 Пропустить'],
-        ['🏠 Главное меню'],
+const profileViewKeyboard = {
+  reply_markup: {
+    inline_keyboard: [
+      [
+        { text: '❤️ Лайк', callback_data: 'like' },
+        { text: '👎 Пропустить', callback_data: 'skip' }
       ],
-      resize_keyboard: true,
-    },
-  });
-}
-
-async function handleBrowse(msg) {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  const state = userState[userId];
-  const text = msg.text || '';
-
-  if (text === '🏠 Главное меню') {
-    delete userState[userId];
-    await bot.sendMessage(chatId, 'Главное меню:', mainMenuKeyboard());
-    return;
+      [{ text: '🏠 Главное меню', callback_data: 'menu' }]
+    ]
   }
+};
 
-  if (text === '❤️ Лайк') {
-    const toId = state.viewingId;
-
-    await supabase.from('likes').upsert({ from_id: userId, to_id: toId }, { onConflict: 'from_id,to_id' });
-
-    const { data: mutual } = await supabase
-      .from('likes')
-      .select('id')
-      .eq('from_id', toId)
-      .eq('to_id', userId)
-      .maybeSingle();
-
-    if (mutual) {
-      const u1 = Math.min(userId, toId);
-      const u2 = Math.max(userId, toId);
-      await supabase.from('matches').upsert({ user1_id: u1, user2_id: u2 }, { onConflict: 'user1_id,user2_id' });
-
-      const me = await getUser(userId);
-      const other = await getUser(toId);
-      const ad = await getRandomAd();
-      const adText = ad ? `\n\n📢 *Реклама:* ${escMd(ad.text)}` : '';
-
-      const icebreaker = await generateIcebreaker(me.name, other.name);
-      const icebreakerText = icebreaker ? `\n\n💬 _${escMd(icebreaker)}_` : '';
-
-      const myUsername = msg.from.username ? `@${msg.from.username}` : 'без username';
-
-      await bot.sendMessage(chatId,
-        `🎉 *Взаимная симпатия!*\n\nВы с *${escMd(other.name)}* понравились друг другу!${icebreakerText}${adText}`,
-        { parse_mode: 'Markdown' }
-      );
-
-      try {
-        await bot.sendMessage(toId,
-          `🎉 *Взаимная симпатия!*\n\nВы с *${escMd(me.name)}* понравились друг другу!\nКонтакт: ${escMd(myUsername)}${icebreakerText}${adText}`,
-          { parse_mode: 'Markdown' }
-        );
-      } catch (_) {}
-    } else {
-      await bot.sendMessage(chatId, '❤️ Лайк отправлен!');
-    }
-
-    await browseProfiles(chatId, userId);
-    return;
+const adminKeyboard = {
+  reply_markup: {
+    inline_keyboard: [
+      [{ text: '📊 Статистика', callback_data: 'admin_stats' }],
+      [{ text: '📢 Рассылка', callback_data: 'admin_broadcast' }],
+      [{ text: '➕ Добавить рекламу', callback_data: 'admin_add_ad' }],
+      [{ text: '📋 Список реклам', callback_data: 'admin_list_ads' }]
+    ]
   }
+};
 
-  if (text === '👎 Пропустить') {
-    await browseProfiles(chatId, userId);
-    return;
-  }
-}
+// ========================
+// ОТПРАВКА АНКЕТЫ
+// ========================
+async function sendProfile(chatId, profile, keyboard) {
+  const text = `
+👤 *${escapeMarkdown(profile.name)}, ${profile.age} лет*
+${profile.gender === 'мужской' ? '👨' : '👩'} ${escapeMarkdown(profile.city || 'Бишкек')}
 
-// ─── show matches ─────────────────────────────────────────────────────────────
+📝 ${escapeMarkdown(profile.about || 'Не указано')}
+`;
 
-async function showMatches(chatId, userId) {
-  const { data: matches } = await supabase
-    .from('matches')
-    .select('*')
-    .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
-
-  if (!matches || matches.length === 0) {
-    await bot.sendMessage(chatId, '💔 У тебя пока нет совпадений.', mainMenuKeyboard());
-    return;
-  }
-
-  await bot.sendMessage(chatId, `❤️ *Твои совпадения (${matches.length}):*`, { parse_mode: 'Markdown' });
-
-  for (const match of matches) {
-    const otherId = match.user1_id === userId ? match.user2_id : match.user1_id;
-    const other = await getUser(otherId);
-    if (other) {
-      await sendProfile(chatId, other);
-    }
-  }
-
-  await bot.sendMessage(chatId, 'Вот все твои совпадения!', mainMenuKeyboard());
-}
-
-// ─── admin panel ─────────────────────────────────────────────────────────────
-
-async function handleAdmin(msg) {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-
-  if (!isAdmin(userId)) {
-    await bot.sendMessage(chatId, '⛔ Нет доступа.');
-    return;
-  }
-
-  userState[userId] = { step: 'admin_menu' };
-  await bot.sendMessage(chatId, '🛠 *Панель администратора*', {
-    parse_mode: 'Markdown',
-    ...adminKeyboard(),
-  });
-}
-
-async function handleAdminMenu(msg) {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  const state = userState[userId];
-  const text = msg.text || '';
-
-  if (!isAdmin(userId)) return;
-
-  if (text === '❌ Выйти из панели') {
-    delete userState[userId];
-    await bot.sendMessage(chatId, 'Вышел из панели администратора.', mainMenuKeyboard());
-    return;
-  }
-
-  if (state.step === 'admin_menu') {
-    if (text === '📊 Статистика') {
-      const { count: usersCount } = await supabase.from('users').select('*', { count: 'exact', head: true });
-      const { count: likesCount } = await supabase.from('likes').select('*', { count: 'exact', head: true });
-      const { count: matchesCount } = await supabase.from('matches').select('*', { count: 'exact', head: true });
-      const { count: adsCount } = await supabase.from('ads').select('*', { count: 'exact', head: true }).eq('active', true);
-
-      await bot.sendMessage(chatId,
-        `📊 *Статистика ConnectKG:*\n\n👤 Пользователей: ${usersCount}\n❤️ Лайков: ${likesCount}\n🎉 Совпадений: ${matchesCount}\n📢 Активных реклам: ${adsCount}`,
-        { parse_mode: 'Markdown' }
-      );
-    } else if (text === '📢 Рассылка') {
-      state.step = 'admin_broadcast';
-      await bot.sendMessage(chatId, 'Введи текст для рассылки всем пользователям:', cancelKeyboard());
-    } else if (text === '➕ Добавить рекламу') {
-      state.step = 'admin_add_ad';
-      await bot.sendMessage(chatId, 'Введи текст рекламного объявления:', cancelKeyboard());
-    } else if (text === '📋 Список реклам') {
-      const { data: ads } = await supabase.from('ads').select('*').order('created_at', { ascending: false });
-      if (!ads || ads.length === 0) {
-        await bot.sendMessage(chatId, 'Нет рекламных объявлений.');
-      } else {
-        let listText = '📋 *Рекламные объявления:*\n\n';
-        ads.forEach((ad, i) => {
-          listText += `${i + 1}\\. \\[${ad.active ? '✅' : '❌'}\\] ${escMd(ad.text)}\n`;
-        });
-        await bot.sendMessage(chatId, listText, { parse_mode: 'MarkdownV2' });
-      }
-    }
-    return;
-  }
-
-  if (state.step === 'admin_broadcast') {
-    if (text === '❌ Отмена') {
-      state.step = 'admin_menu';
-      await bot.sendMessage(chatId, 'Отменено.', adminKeyboard());
-      return;
-    }
-
-    const { data: users } = await supabase.from('users').select('telegram_id').eq('active', true);
-    let sent = 0;
-    let failed = 0;
-    await bot.sendMessage(chatId, `⏳ Отправляю рассылку ${(users || []).length} пользователям...`);
-
-    for (const u of users || []) {
-      try {
-        await bot.sendMessage(u.telegram_id, `📢 *Объявление:*\n\n${text}`, { parse_mode: 'Markdown' });
-        sent++;
-      } catch (_) {
-        failed++;
-      }
-    }
-
-    state.step = 'admin_menu';
-    await bot.sendMessage(chatId, `✅ Рассылка завершена!\nОтправлено: ${sent}\nОшибок: ${failed}`, adminKeyboard());
-    return;
-  }
-
-  if (state.step === 'admin_add_ad') {
-    if (text === '❌ Отмена') {
-      state.step = 'admin_menu';
-      await bot.sendMessage(chatId, 'Отменено.', adminKeyboard());
-      return;
-    }
-
-    await supabase.from('ads').insert({ text, active: true });
-    state.step = 'admin_menu';
-    await bot.sendMessage(chatId, '✅ Реклама добавлена!', adminKeyboard());
-    return;
-  }
-}
-
-// ─── Groq AI icebreaker ───────────────────────────────────────────────────────
-
-async function generateIcebreaker(name1, name2) {
-  try {
-    const chat = await groq.chat.completions.create({
-      model: 'llama3-8b-8192',
-      messages: [
-        {
-          role: 'user',
-          content: `Придумай короткое (1-2 предложения) смешное и дружелюбное приветствие для двух людей, которые только что совпали на сайте знакомств. Их зовут ${name1} и ${name2}. Напиши только текст сообщения, без кавычек.`,
-        },
-      ],
-      max_tokens: 100,
+  if (profile.photo_id) {
+    await bot.sendPhoto(chatId, profile.photo_id, {
+      caption: text,
+      parse_mode: 'Markdown',
+      ...keyboard
     });
-    return chat.choices[0]?.message?.content?.trim() || null;
-  } catch (_) {
-    return null;
+  } else {
+    await bot.sendMessage(chatId, text, {
+      parse_mode: 'Markdown',
+      ...keyboard
+    });
   }
 }
 
-// ─── main message handler ────────────────────────────────────────────────────
+function escapeMarkdown(text) {
+  if (!text) return '';
+  return String(text).replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&');
+}
 
-bot.on('message', async (msg) => {
-  const chatId = msg.chat.id;
+// ========================
+// GROQ AI — КОМПЛИМЕНТ ПРИ СОВПАДЕНИИ
+// ========================
+async function getMatchCompliment(name1, name2) {
+  if (!groq) return `🎉 У вас совпадение! Вы понравились друг другу!`;
+  try {
+    const completion = await groq.chat.completions.create({
+      messages: [{
+        role: 'user',
+        content: `Напиши короткое (1-2 предложения) романтичное поздравление с совпадением для ${name1} и ${name2}. На русском языке. Без лишних слов.`
+      }],
+      model: 'llama3-8b-8192',
+      max_tokens: 100
+    });
+    return completion.choices[0]?.message?.content || `🎉 У вас совпадение!`;
+  } catch {
+    return `🎉 У вас совпадение! Вы понравились друг другу!`;
+  }
+}
+
+// ========================
+// КОМАНДА /start
+// ========================
+bot.onText(/\/start/, async (msg) => {
   const userId = msg.from.id;
-  const text = msg.text || '';
-
-  if (text === '/start') {
-    const user = await getUser(userId);
-    if (user) {
-      await bot.sendMessage(chatId, `👋 С возвращением, *${escMd(user.name)}*!`, {
-        parse_mode: 'Markdown',
-        ...mainMenuKeyboard(),
-      });
-    } else {
-      await startRegistration(chatId, userId);
-    }
-    return;
-  }
-
-  if (text === '/admin') {
-    await handleAdmin(msg);
-    return;
-  }
-
-  const state = userState[userId];
-
-  if (state && (state.step === 'admin_menu' || state.step === 'admin_broadcast' || state.step === 'admin_add_ad')) {
-    await handleAdminMenu(msg);
-    return;
-  }
-
-  if (state && state.step && state.step.startsWith('reg_')) {
-    await handleRegistration(msg);
-    return;
-  }
-
-  if (state && state.step && state.step.startsWith('edit_')) {
-    await handleEditProfile(msg);
-    return;
-  }
-
-  if (state && state.step === 'browsing') {
-    await handleBrowse(msg);
-    return;
-  }
+  const firstName = msg.from.first_name;
 
   const user = await getUser(userId);
-  if (!user) {
-    await startRegistration(chatId, userId);
+
+  if (user) {
+    await bot.sendMessage(userId,
+      `👋 С возвращением, *${escapeMarkdown(user.name)}*!\n\nЧто хочешь сделать?`,
+      { parse_mode: 'Markdown', ...mainMenuKeyboard }
+    );
+  } else {
+    await bot.sendMessage(userId,
+      `👋 Привет, *${escapeMarkdown(firstName)}*!\n\nДобро пожаловать в *ConnectKG* — знакомства в Бишкеке! 🇰🇬\n\nДавай создадим твою анкету. Это займёт меньше минуты!`,
+      { parse_mode: 'Markdown' }
+    );
+    await startRegistration(userId);
+  }
+});
+
+// ========================
+// РЕГИСТРАЦИЯ
+// ========================
+async function startRegistration(userId) {
+  setState(userId, 'reg_name');
+  await bot.sendMessage(userId, '📝 *Как тебя зовут?*\n\nНапиши своё имя:', { parse_mode: 'Markdown' });
+}
+
+async function handleRegistration(msg) {
+  const userId = msg.from.id;
+  const { step, data } = getState(userId);
+  const text = msg.text;
+
+  if (step === 'reg_name') {
+    if (!text || text.length < 2 || text.length > 30) {
+      return bot.sendMessage(userId, '⚠️ Имя должно быть от 2 до 30 символов. Попробуй ещё раз:');
+    }
+    setState(userId, 'reg_age', { name: text });
+    await bot.sendMessage(userId, `✅ Отлично, *${escapeMarkdown(text)}*!\n\n🎂 Сколько тебе лет?`, { parse_mode: 'Markdown' });
+
+  } else if (step === 'reg_age') {
+    const age = parseInt(text);
+    if (isNaN(age) || age < 16 || age > 80) {
+      return bot.sendMessage(userId, '⚠️ Укажи реальный возраст (от 16 до 80):');
+    }
+    setState(userId, 'reg_gender', { ...data, age });
+    await bot.sendMessage(userId, '👫 Кто ты?', registrationGenderKeyboard);
+
+  } else if (step === 'reg_about') {
+    if (!text || text.length < 5 || text.length > 300) {
+      return bot.sendMessage(userId, '⚠️ Описание от 5 до 300 символов. Попробуй ещё раз:');
+    }
+    setState(userId, 'reg_photo', { ...data, about: text });
+    await bot.sendMessage(userId,
+      '📸 Отправь своё фото!\n\n_(или напиши "пропустить" если не хочешь)_',
+      { parse_mode: 'Markdown' }
+    );
+
+  } else if (step === 'reg_photo') {
+    let photoId = null;
+
+    if (msg.photo) {
+      photoId = msg.photo[msg.photo.length - 1].file_id;
+    } else if (text && text.toLowerCase() === 'пропустить') {
+      photoId = null;
+    } else {
+      return bot.sendMessage(userId, '📸 Отправь фото или напиши "пропустить":');
+    }
+
+    // Сохраняем пользователя
+    try {
+      const newUser = await createUser({
+        telegram_id: userId,
+        username: msg.from.username || null,
+        name: data.name,
+        age: data.age,
+        gender: data.gender,
+        about: data.about,
+        photo_id: photoId,
+        city: 'Бишкек',
+        is_active: true,
+        created_at: new Date().toISOString()
+      });
+
+      clearState(userId);
+
+      await bot.sendMessage(userId,
+        `🎉 *Анкета создана!*\n\n👤 ${escapeMarkdown(newUser.name)}, ${newUser.age} лет\n📍 Бишкек\n\nТеперь ты можешь смотреть анкеты и находить совпадения!`,
+        { parse_mode: 'Markdown', ...mainMenuKeyboard }
+      );
+    } catch (err) {
+      console.error('Ошибка создания пользователя:', err);
+      await bot.sendMessage(userId, '❌ Произошла ошибка. Попробуй ещё раз /start');
+    }
+  }
+}
+
+// ========================
+// ПРОСМОТР АНКЕТ
+// ========================
+async function showNextProfile(userId) {
+  const profile = await getNextProfile(userId);
+
+  if (!profile) {
+    return bot.sendMessage(userId,
+      '😔 *Анкеты закончились!*\n\nПока никого нет. Загляни позже — новые пользователи появляются каждый день! 🌟',
+      { parse_mode: 'Markdown', ...mainMenuKeyboard }
+    );
+  }
+
+  setState(userId, 'viewing', { currentProfileId: profile.telegram_id });
+  await sendProfile(userId, profile, profileViewKeyboard);
+}
+
+// ========================
+// ОБРАБОТКА ЛАЙКОВ
+// ========================
+async function handleLike(userId) {
+  const { data } = getState(userId);
+  const targetId = data.currentProfileId;
+
+  if (!targetId) {
+    return bot.sendMessage(userId, '⚠️ Что-то пошло не так. Попробуй снова.', mainMenuKeyboard);
+  }
+
+  // Проверяем дубликат
+  const alreadyLiked = await hasAlreadyLiked(userId, targetId);
+  if (alreadyLiked) {
+    return showNextProfile(userId);
+  }
+
+  await addLike(userId, targetId);
+
+  // Проверяем взаимный лайк
+  const isMutual = await checkMutualLike(userId, targetId);
+
+  if (isMutual) {
+    await addMatch(userId, targetId);
+
+    const [currentUser, targetUser] = await Promise.all([
+      getUser(userId),
+      getUser(targetId)
+    ]);
+
+    const compliment = await getMatchCompliment(currentUser.name, targetUser.name);
+    const ad = await getRandomAd();
+
+    const matchText = `
+💘 *СОВПАДЕНИЕ!*
+
+${compliment}
+
+👤 *${escapeMarkdown(targetUser.name)}* понравилась тебе, и ты понравился ${escapeMarkdown(targetUser.name)}!
+
+📩 Напиши им: @${targetUser.username || 'пользователь скрыл ник'}
+`;
+
+    await bot.sendMessage(userId, matchText, { parse_mode: 'Markdown' });
+
+    // Уведомляем второго пользователя
+    const matchTextForTarget = `
+💘 *СОВПАДЕНИЕ!*
+
+${compliment}
+
+👤 *${escapeMarkdown(currentUser.name)}* тоже лайкнул тебя!
+
+📩 Напиши им: @${currentUser.username || 'пользователь скрыл ник'}
+`;
+    try {
+      await bot.sendMessage(targetId, matchTextForTarget, { parse_mode: 'Markdown' });
+    } catch {}
+
+    // Показываем рекламу при совпадении
+    if (ad) {
+      const adText = `\n\n🎁 *Специально для вас от наших партнёров:*\n\n📍 *${escapeMarkdown(ad.business_name)}*\n${escapeMarkdown(ad.description)}\n\n${ad.contact || ''}`;
+      await bot.sendMessage(userId, adText, { parse_mode: 'Markdown' });
+    }
+  } else {
+    await bot.sendMessage(userId, '❤️ Лайк отправлен!');
+  }
+
+  // Показываем следующую анкету
+  await showNextProfile(userId);
+}
+
+// ========================
+// МОЯ АНКЕТА
+// ========================
+async function showMyProfile(userId) {
+  const user = await getUser(userId);
+  if (!user) return bot.sendMessage(userId, '❌ Анкета не найдена. Напиши /start');
+
+  const text = `
+👤 *Моя анкета*
+
+📝 Имя: *${escapeMarkdown(user.name)}*
+🎂 Возраст: *${user.age} лет*
+👫 Пол: *${escapeMarkdown(user.gender)}*
+📍 Город: *${escapeMarkdown(user.city || 'Бишкек')}*
+💬 О себе: *${escapeMarkdown(user.about || 'Не указано')}*
+`;
+
+  const keyboard = {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: '✏️ Изменить имя', callback_data: 'edit_name' }],
+        [{ text: '✏️ Изменить возраст', callback_data: 'edit_age' }],
+        [{ text: '✏️ Изменить описание', callback_data: 'edit_about' }],
+        [{ text: '📸 Изменить фото', callback_data: 'edit_photo' }],
+        [{ text: user.is_active ? '⏸ Скрыть анкету' : '▶️ Показать анкету', callback_data: 'toggle_active' }]
+      ]
+    }
+  };
+
+  if (user.photo_id) {
+    await bot.sendPhoto(userId, user.photo_id, { caption: text, parse_mode: 'Markdown', ...keyboard });
+  } else {
+    await bot.sendMessage(userId, text, { parse_mode: 'Markdown', ...keyboard });
+  }
+}
+
+// ========================
+// КОМАНДА /admin
+// ========================
+bot.onText(/\/admin/, async (msg) => {
+  const userId = msg.from.id;
+
+  if (!ADMIN_IDS.includes(userId)) {
+    return bot.sendMessage(userId, '❌ У вас нет доступа к панели администратора.');
+  }
+
+  await bot.sendMessage(userId, '🛠 *Панель администратора ConnectKG*', {
+    parse_mode: 'Markdown',
+    ...adminKeyboard
+  });
+});
+
+// ========================
+// ОБРАБОТЧИКИ CALLBACK
+// ========================
+bot.on('callback_query', async (query) => {
+  const userId = query.from.id;
+  const data = query.data;
+
+  await bot.answerCallbackQuery(query.id);
+
+  // --- РЕГИСТРАЦИЯ: ПОЛ ---
+  if (data.startsWith('gender_')) {
+    const gender = data.replace('gender_', '');
+    const { data: stateData } = getState(userId);
+    setState(userId, 'reg_about', { ...stateData, gender });
+    await bot.sendMessage(userId, '💬 *Расскажи о себе* (интересы, чем занимаешься, что ищешь):', { parse_mode: 'Markdown' });
     return;
   }
 
-  if (text === '👀 Смотреть анкеты') {
-    await browseProfiles(chatId, userId);
+  // --- ПРОСМОТР АНКЕТ ---
+  if (data === 'like') {
+    await handleLike(userId);
     return;
   }
 
-  if (text === '❤️ Мои совпадения') {
-    await showMatches(chatId, userId);
+  if (data === 'skip') {
+    await showNextProfile(userId);
     return;
   }
 
-  if (text === '✏️ Редактировать анкету') {
-    await startEditProfile(chatId, userId);
+  if (data === 'menu') {
+    clearState(userId);
+    await bot.sendMessage(userId, '🏠 Главное меню', mainMenuKeyboard);
+    return;
+  }
+
+  // --- РЕДАКТИРОВАНИЕ АНКЕТЫ ---
+  if (data === 'edit_name') {
+    setState(userId, 'edit_name');
+    await bot.sendMessage(userId, '✏️ Введи новое имя:');
+    return;
+  }
+
+  if (data === 'edit_age') {
+    setState(userId, 'edit_age');
+    await bot.sendMessage(userId, '✏️ Введи новый возраст:');
+    return;
+  }
+
+  if (data === 'edit_about') {
+    setState(userId, 'edit_about');
+    await bot.sendMessage(userId, '✏️ Напиши новое описание:');
+    return;
+  }
+
+  if (data === 'edit_photo') {
+    setState(userId, 'edit_photo');
+    await bot.sendMessage(userId, '📸 Отправь новое фото:');
+    return;
+  }
+
+  if (data === 'toggle_active') {
+    const user = await getUser(userId);
+    await updateUser(userId, { is_active: !user.is_active });
+    await bot.sendMessage(userId,
+      user.is_active ? '⏸ Анкета скрыта. Тебя не видят другие пользователи.' : '▶️ Анкета активна!',
+      mainMenuKeyboard
+    );
+    return;
+  }
+
+  // --- ADMIN ---
+  if (data === 'admin_stats' && ADMIN_IDS.includes(userId)) {
+    const { count: usersCount } = await supabase.from('users').select('*', { count: 'exact', head: true });
+    const { count: matchesCount } = await supabase.from('matches').select('*', { count: 'exact', head: true });
+    const { count: likesCount } = await supabase.from('likes').select('*', { count: 'exact', head: true });
+
+    await bot.sendMessage(userId,
+      `📊 *Статистика ConnectKG*\n\n👥 Пользователей: *${usersCount || 0}*\n❤️ Лайков: *${likesCount || 0}*\n💘 Совпадений: *${matchesCount || 0}*`,
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+
+  if (data === 'admin_broadcast' && ADMIN_IDS.includes(userId)) {
+    setState(userId, 'admin_broadcast');
+    await bot.sendMessage(userId, '📢 Введи текст рассылки (будет отправлен всем активным пользователям):');
+    return;
+  }
+
+  if (data === 'admin_add_ad' && ADMIN_IDS.includes(userId)) {
+    setState(userId, 'admin_add_ad_name');
+    await bot.sendMessage(userId, '➕ *Добавление рекламы*\n\nВведи название бизнеса:', { parse_mode: 'Markdown' });
+    return;
+  }
+
+  if (data === 'admin_list_ads' && ADMIN_IDS.includes(userId)) {
+    const { data: ads } = await supabase.from('ads').select('*').eq('active', true);
+    if (!ads || ads.length === 0) {
+      await bot.sendMessage(userId, '📋 Активных реклам нет.');
+    } else {
+      const list = ads.map((ad, i) => `${i + 1}. *${escapeMarkdown(ad.business_name)}* — ${escapeMarkdown(ad.description)}`).join('\n');
+      await bot.sendMessage(userId, `📋 *Активные рекламы:*\n\n${list}`, { parse_mode: 'Markdown' });
+    }
+    return;
+  }
+});
+
+// ========================
+// ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ
+// ========================
+bot.on('message', async (msg) => {
+  const userId = msg.from.id;
+  const text = msg.text;
+  const { step } = getState(userId);
+
+  // Главное меню — кнопки
+  if (text === '❤️ Смотреть анкеты') {
+    const user = await getUser(userId);
+    if (!user) return bot.sendMessage(userId, '❌ Сначала зарегистрируйся: /start');
+    await showNextProfile(userId);
     return;
   }
 
   if (text === '👤 Моя анкета') {
-    await sendProfile(chatId, user, mainMenuKeyboard());
+    await showMyProfile(userId);
     return;
   }
 
-  await bot.sendMessage(chatId, 'Используй кнопки меню ниже 👇', mainMenuKeyboard());
+  if (text === '⚙️ Настройки') {
+    await bot.sendMessage(userId, '⚙️ *Настройки*\n\nЧто хочешь изменить?', {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '✏️ Редактировать анкету', callback_data: 'edit_about' }],
+          [{ text: '📸 Сменить фото', callback_data: 'edit_photo' }]
+        ]
+      }
+    });
+    return;
+  }
+
+  if (text === '❓ Помощь') {
+    await bot.sendMessage(userId,
+      `❓ *Помощь*\n\n*ConnectKG* — это бот знакомств для Бишкека 🇰🇬\n\n*Как это работает:*\n1. Смотри анкеты\n2. Ставь ❤️ тем, кто понравился\n3. Если симпатия взаимна — это совпадение! 💘\n4. Напишите друг другу в Telegram\n\n*Команды:*\n/start — главное меню\n/admin — панель администратора\n\n📞 Поддержка: @connectkg`,
+      { parse_mode: 'Markdown', ...mainMenuKeyboard }
+    );
+    return;
+  }
+
+  // Игнорируем команды
+  if (text && text.startsWith('/')) return;
+
+  // Обработка состояний регистрации
+  if (step && step.startsWith('reg_')) {
+    await handleRegistration(msg);
+    return;
+  }
+
+  // Обработка редактирования анкеты
+  if (step === 'edit_name') {
+    if (!text || text.length < 2 || text.length > 30) {
+      return bot.sendMessage(userId, '⚠️ Имя от 2 до 30 символов:');
+    }
+    await updateUser(userId, { name: text });
+    clearState(userId);
+    await bot.sendMessage(userId, `✅ Имя изменено на *${escapeMarkdown(text)}*`, { parse_mode: 'Markdown', ...mainMenuKeyboard });
+    return;
+  }
+
+  if (step === 'edit_age') {
+    const age = parseInt(text);
+    if (isNaN(age) || age < 16 || age > 80) {
+      return bot.sendMessage(userId, '⚠️ Возраст от 16 до 80:');
+    }
+    await updateUser(userId, { age });
+    clearState(userId);
+    await bot.sendMessage(userId, `✅ Возраст изменён на *${age}*`, { parse_mode: 'Markdown', ...mainMenuKeyboard });
+    return;
+  }
+
+  if (step === 'edit_about') {
+    if (!text || text.length < 5 || text.length > 300) {
+      return bot.sendMessage(userId, '⚠️ Описание от 5 до 300 символов:');
+    }
+    await updateUser(userId, { about: text });
+    clearState(userId);
+    await bot.sendMessage(userId, '✅ Описание обновлено!', mainMenuKeyboard);
+    return;
+  }
+
+  if (step === 'edit_photo') {
+    if (msg.photo) {
+      const photoId = msg.photo[msg.photo.length - 1].file_id;
+      await updateUser(userId, { photo_id: photoId });
+      clearState(userId);
+      await bot.sendMessage(userId, '✅ Фото обновлено!', mainMenuKeyboard);
+    } else {
+      await bot.sendMessage(userId, '📸 Отправь фото:');
+    }
+    return;
+  }
+
+  // Admin: рассылка
+  if (step === 'admin_broadcast' && ADMIN_IDS.includes(userId)) {
+    const { data: users } = await supabase.from('users').select('telegram_id').eq('is_active', true);
+    let sent = 0, failed = 0;
+    for (const user of users || []) {
+      try {
+        await bot.sendMessage(user.telegram_id, `📢 *Сообщение от ConnectKG:*\n\n${text}`, { parse_mode: 'Markdown' });
+        sent++;
+      } catch { failed++; }
+      await new Promise(r => setTimeout(r, 50)); // задержка чтобы не превысить лимиты
+    }
+    clearState(userId);
+    await bot.sendMessage(userId, `✅ Рассылка завершена!\n✉️ Отправлено: ${sent}\n❌ Не доставлено: ${failed}`, mainMenuKeyboard);
+    return;
+  }
+
+  // Admin: добавление рекламы
+  if (step === 'admin_add_ad_name' && ADMIN_IDS.includes(userId)) {
+    setState(userId, 'admin_add_ad_desc', { ad_name: text });
+    await bot.sendMessage(userId, '📝 Введи описание/оффер для рекламы (например: "Скидка 10% для пар"):');
+    return;
+  }
+
+  if (step === 'admin_add_ad_desc' && ADMIN_IDS.includes(userId)) {
+    const { data: stateData } = getState(userId);
+    setState(userId, 'admin_add_ad_contact', { ...stateData, ad_desc: text });
+    await bot.sendMessage(userId, '📞 Введи контакт бизнеса (телефон или @username):');
+    return;
+  }
+
+  if (step === 'admin_add_ad_contact' && ADMIN_IDS.includes(userId)) {
+    const { data: stateData } = getState(userId);
+    await supabase.from('ads').insert([{
+      business_name: stateData.ad_name,
+      description: stateData.ad_desc,
+      contact: text,
+      active: true,
+      created_at: new Date().toISOString()
+    }]);
+    clearState(userId);
+    await bot.sendMessage(userId, `✅ Реклама *${escapeMarkdown(stateData.ad_name)}* добавлена!`, { parse_mode: 'Markdown', ...adminKeyboard });
+    return;
+  }
+
+  // Если непонятное сообщение — показываем меню
+  const user = await getUser(userId);
+  if (!user) {
+    await bot.sendMessage(userId, '👋 Напиши /start чтобы начать!');
+  } else {
+    await bot.sendMessage(userId, '🏠 Главное меню', mainMenuKeyboard);
+  }
 });
 
-bot.on('polling_error', (err) => {
-  console.error('Polling error:', err.message);
+// ========================
+// ОБРАБОТКА ОШИБОК
+// ========================
+bot.on('polling_error', (error) => {
+  console.error('Polling error:', error.message);
 });
 
-console.log('ConnectKG bot started...');
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled rejection:', err);
+});
+
+console.log('✅ ConnectKG бот готов к работе!');
