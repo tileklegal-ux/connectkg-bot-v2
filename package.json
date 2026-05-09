@@ -1,0 +1,14 @@
+{
+  "name": "connectkg",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0",
+    "@supabase/supabase-js": "^2.45.4",
+    "groq-sdk": "^0.7.0",
+    "dotenv": "^16.4.5"
+  }
+}
