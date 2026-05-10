@@ -1,6 +1,10 @@
 require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const Groq = require('groq-sdk');
+const express = require('express');
+const app = express();
+app.get('/api/health', (req, res) => res.json({ ok: true }));
+app.listen(process.env.PORT || 3000);
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
