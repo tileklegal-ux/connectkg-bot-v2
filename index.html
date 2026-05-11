@@ -7,70 +7,214 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#0d0d1a;color:#f0f0ff;font-family:'Nunito',sans-serif;height:100vh;overflow:hidden}
+:root{
+  --bg:#080812;
+  --card:#0f0f20;
+  --glass:rgba(15,15,32,0.85);
+  --border:rgba(255,255,255,0.06);
+  --accent:#ff2d55;
+  --accent2:#ff6b35;
+  --blue:#4facfe;
+  --text:#f5f5ff;
+  --muted:#6b6b8a;
+}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;height:100vh;overflow:hidden}
 #map{width:100%;height:100vh;z-index:1}
-.nav{position:fixed;bottom:0;left:0;right:0;background:rgba(13,13,26,0.95);backdrop-filter:blur(20px);border-top:1px solid rgba(255,255,255,0.08);display:flex;justify-content:space-around;padding:10px 0 20px;z-index:1000}
-.nav-btn{background:none;border:none;color:#666;font-size:10px;font-family:'Nunito',sans-serif;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 16px;transition:color 0.2s}
-.nav-btn.active{color:#ff4d6d}
-.nav-btn span{font-size:22px}
-.fab{position:fixed;bottom:90px;right:20px;width:56px;height:56px;background:linear-gradient(135deg,#ff4d6d,#ff8c42);border:none;border-radius:50%;font-size:26px;cursor:pointer;z-index:999;box-shadow:0 4px 20px rgba(255,77,109,0.5);transition:transform 0.2s}
+
+/* Тёмные тайлы */
+.leaflet-tile-pane{filter:brightness(0.7) saturate(0.6) hue-rotate(180deg) invert(1)}
+
+/* Навигация */
+.nav{
+  position:fixed;bottom:0;left:0;right:0;
+  background:var(--glass);
+  backdrop-filter:blur(24px);
+  -webkit-backdrop-filter:blur(24px);
+  border-top:1px solid var(--border);
+  display:flex;justify-content:space-around;
+  padding:12px 0 28px;z-index:1000;
+}
+.nav-btn{
+  background:none;border:none;color:var(--muted);
+  font-size:10px;font-family:'Inter',sans-serif;font-weight:600;
+  cursor:pointer;display:flex;flex-direction:column;
+  align-items:center;gap:4px;padding:4px 20px;
+  transition:all 0.2s;letter-spacing:0.3px;
+}
+.nav-btn.active{color:var(--accent)}
+.nav-btn .icon{
+  width:44px;height:44px;border-radius:14px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:20px;transition:all 0.2s;
+}
+.nav-btn.active .icon{
+  background:linear-gradient(135deg,rgba(255,45,85,0.2),rgba(255,107,53,0.2));
+  box-shadow:0 0 20px rgba(255,45,85,0.3);
+}
+
+/* FAB кнопка */
+.fab{
+  position:fixed;bottom:100px;right:20px;
+  width:60px;height:60px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  border:none;border-radius:20px;font-size:28px;
+  cursor:pointer;z-index:999;
+  box-shadow:0 8px 32px rgba(255,45,85,0.5);
+  transition:transform 0.15s;
+}
 .fab:active{transform:scale(0.92)}
-.sheet{position:fixed;bottom:-100%;left:0;right:0;background:#13132a;border-radius:24px 24px 0 0;padding:24px 20px 100px;z-index:2000;transition:bottom 0.35s cubic-bezier(.4,0,.2,1);max-height:85vh;overflow-y:auto}
+
+/* Шторка */
+.sheet{
+  position:fixed;bottom:-100%;left:0;right:0;
+  background:var(--card);
+  border-radius:28px 28px 0 0;
+  border-top:1px solid var(--border);
+  padding:16px 20px 120px;
+  z-index:2000;
+  transition:bottom 0.4s cubic-bezier(.4,0,.2,1);
+  max-height:88vh;overflow-y:auto;
+}
 .sheet.open{bottom:0}
-.sheet-handle{width:40px;height:4px;background:rgba(255,255,255,0.15);border-radius:2px;margin:0 auto 20px}
-.pin-card{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:16px;margin-bottom:12px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:background 0.2s}
-.pin-card:active{background:rgba(255,77,109,0.1)}
-.pin-icon{width:52px;height:52px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0}
-.pin-info{flex:1}
-.pin-name{font-weight:800;font-size:15px}
-.pin-desc{font-size:12px;color:#8888aa;margin-top:2px}
-.pin-time{font-size:11px;color:#ff8c42;margin-top:4px;font-weight:700}
-.join-btn{background:linear-gradient(135deg,#ff4d6d,#ff8c42);border:none;border-radius:12px;padding:8px 16px;color:#fff;font-family:'Nunito',sans-serif;font-weight:800;font-size:13px;cursor:pointer;flex-shrink:0}
-.input-row{display:flex;gap:10px;margin-bottom:16px}
-.input-row input{flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:14px;padding:12px 16px;color:#f0f0ff;font-family:'Nunito',sans-serif;font-size:14px}
-.input-row input::placeholder{color:#555}
-.send-btn{background:linear-gradient(135deg,#ff4d6d,#ff8c42);border:none;border-radius:14px;padding:12px 18px;color:#fff;font-size:20px;cursor:pointer}
-.type-pills{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
-.pill{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:7px 14px;font-size:13px;font-family:'Nunito',sans-serif;color:#aaa;cursor:pointer;transition:all 0.2s}
-.pill.active{background:rgba(255,77,109,0.2);border-color:#ff4d6d;color:#ff4d6d}
-.section-title{font-size:18px;font-weight:900;margin-bottom:16px}
-.leaflet-container{background:#1a1a2e}
-.custom-marker{background:linear-gradient(135deg,#ff4d6d,#ff8c42);border-radius:50% 50% 50% 0;width:36px;height:36px;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(255,77,109,0.5);border:2px solid #fff}
-.custom-marker span{transform:rotate(45deg);font-size:16px}
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1999;display:none}
+.handle{
+  width:36px;height:4px;
+  background:rgba(255,255,255,0.1);
+  border-radius:2px;margin:0 auto 24px;
+}
+
+/* Карточки */
+.card{
+  background:rgba(255,255,255,0.04);
+  border:1px solid var(--border);
+  border-radius:20px;padding:16px;
+  margin-bottom:12px;
+  display:flex;align-items:center;gap:14px;
+  cursor:pointer;transition:all 0.2s;
+}
+.card:active{background:rgba(255,45,85,0.08);border-color:rgba(255,45,85,0.2)}
+.card-icon{
+  width:54px;height:54px;border-radius:16px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:24px;flex-shrink:0;
+}
+.card-title{font-weight:600;font-size:15px;font-family:'Unbounded',sans-serif;font-size:13px}
+.card-sub{font-size:12px;color:var(--muted);margin-top:3px}
+.card-time{font-size:11px;color:var(--accent2);margin-top:5px;font-weight:600}
+
+/* Кнопки */
+.btn-primary{
+  width:100%;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  border:none;border-radius:18px;padding:18px;
+  color:#fff;font-family:'Unbounded',sans-serif;
+  font-size:14px;font-weight:700;cursor:pointer;
+  box-shadow:0 8px 24px rgba(255,45,85,0.35);
+  transition:transform 0.15s;
+}
+.btn-primary:active{transform:scale(0.97)}
+
+/* Инпут */
+.input{
+  width:100%;
+  background:rgba(255,255,255,0.05);
+  border:1px solid var(--border);
+  border-radius:14px;padding:14px 16px;
+  color:var(--text);font-family:'Inter',sans-serif;font-size:14px;
+  margin-bottom:12px;outline:none;
+  transition:border-color 0.2s;
+}
+.input:focus{border-color:rgba(255,45,85,0.4)}
+.input::placeholder{color:var(--muted)}
+
+/* Пилюли типов */
+.pills{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.pill{
+  background:rgba(255,255,255,0.05);
+  border:1px solid var(--border);
+  border-radius:20px;padding:8px 14px;
+  font-size:13px;font-family:'Inter',sans-serif;
+  color:var(--muted);cursor:pointer;transition:all 0.2s;
+}
+.pill.active{
+  background:rgba(255,45,85,0.15);
+  border-color:var(--accent);color:var(--accent);
+}
+
+/* Заголовки */
+.section-title{
+  font-family:'Unbounded',sans-serif;
+  font-size:16px;font-weight:700;
+  margin-bottom:20px;
+  background:linear-gradient(135deg,var(--text),var(--muted));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+}
+
+/* Оверлей */
+.overlay{
+  position:fixed;inset:0;
+  background:rgba(0,0,0,0.6);
+  backdrop-filter:blur(4px);
+  z-index:1999;display:none;
+}
 .overlay.open{display:block}
-.match-badge{position:absolute;top:-4px;right:-4px;background:#ff4d6d;width:18px;height:18px;border-radius:50%;font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:900}
+
+/* Бейдж матчей */
+.badge{
+  position:absolute;top:-2px;right:-2px;
+  background:var(--accent);
+  width:16px;height:16px;border-radius:50%;
+  font-size:9px;font-weight:900;
+  display:flex;align-items:center;justify-content:center;
+}
+
+/* Пустое состояние */
+.empty{text-align:center;padding:48px 20px}
+.empty-icon{font-size:52px;margin-bottom:16px}
+.empty-title{font-family:'Unbounded',sans-serif;font-size:15px;font-weight:700;margin-bottom:8px}
+.empty-sub{font-size:13px;color:var(--muted);line-height:1.6}
+
+/* Пульсация геолокации */
+@keyframes pulse{
+  0%{transform:scale(1);opacity:1}
+  100%{transform:scale(3);opacity:0}
+}
+.pulse-ring{
+  position:absolute;
+  width:20px;height:20px;border-radius:50%;
+  background:rgba(255,45,85,0.3);
+  animation:pulse 2s ease-out infinite;
+}
 </style>
 </head>
 <body>
 
 <div id="map"></div>
-
-<button class="fab" onclick="openSheet('add')">+</button>
+<button class="fab" onclick="openAdd()">＋</button>
 
 <nav class="nav">
   <button class="nav-btn active" id="btn-map" onclick="switchTab('map')">
-    <span>🗺</span>Карта
+    <div class="icon">🗺</div>Карта
   </button>
   <button class="nav-btn" id="btn-meets" onclick="switchTab('meets')">
-    <span>📅</span>Встречи
+    <div class="icon">📅</div>Встречи
   </button>
   <button class="nav-btn" id="btn-matches" onclick="switchTab('matches')">
-    <span style="position:relative;display:inline-block">❤️<span class="match-badge" id="match-count">0</span></span>Матчи
+    <div class="icon" style="position:relative">
+      ❤️<span class="badge" id="match-count">0</span>
+    </div>Матчи
   </button>
   <button class="nav-btn" id="btn-profile" onclick="switchTab('profile')">
-    <span>👤</span>Профиль
+    <div class="icon">👤</div>Я
   </button>
 </nav>
 
 <div class="overlay" id="overlay" onclick="closeSheet()"></div>
-
 <div class="sheet" id="sheet">
-  <div class="sheet-handle"></div>
-  <div id="sheet-content"></div>
+  <div class="handle"></div>
+  <div id="sheet-body"></div>
 </div>
 
 <script>
@@ -79,232 +223,211 @@ const tgUser = tg?.initDataUnsafe?.user;
 const API = 'https://connectkg-bot.bonto.run';
 
 tg?.expand?.();
-tg?.setHeaderColor?.('#0d0d1a');
-tg?.setBackgroundColor?.('#0d0d1a');
+tg?.setHeaderColor?.('#080812');
+tg?.setBackgroundColor?.('#080812');
 
-let map, activities = [], me = null;
-let selectedType = 'Кофе';
+let map, activities=[], me=null, selectedType='Кофе';
 
-const TYPES = {
-  'Кофе':    {icon:'☕', color:'#8B5CF6'},
-  'Прогулка':{icon:'🚶', color:'#10B981'},
-  'Кино':    {icon:'🎬', color:'#F59E0B'},
-  'Еда':     {icon:'🍕', color:'#EF4444'},
-  'Спорт':   {icon:'🏃', color:'#3B82F6'},
-  'Другое':  {icon:'✨', color:'#EC4899'},
+const TYPES={
+  'Кофе':    {icon:'☕',color:'#8B5CF6'},
+  'Прогулка':{icon:'🚶',color:'#10B981'},
+  'Кино':    {icon:'🎬',color:'#F59E0B'},
+  'Еда':     {icon:'🍕',color:'#EF4444'},
+  'Спорт':   {icon:'🏃',color:'#3B82F6'},
+  'Другое':  {icon:'✨',color:'#EC4899'},
 };
 
-// Инициализация карты — центр Бишкека
-map = L.map('map', {zoomControl:false, attributionControl:false}).setView([42.8746, 74.5698], 13);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+// Тёмная карта
+map = L.map('map',{zoomControl:false,attributionControl:false}).setView([42.8746,74.5698],13);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
 
-// Загрузка пользователя
-async function loadUser() {
-  if (!tgUser?.id) return;
-  try {
-    const r = await fetch(API + '/api/user/' + tgUser.id);
-    const d = await r.json();
-    if (!d.error) { me = d; updateMatchCount(); }
-  } catch(e) {}
+async function loadUser(){
+  if(!tgUser?.id)return;
+  try{
+    const r=await fetch(API+'/api/user/'+tgUser.id);
+    const d=await r.json();
+    if(!d.error){me=d;loadMatchCount();}
+  }catch(e){}
 }
 
-// Загрузка активностей
-async function loadActivities() {
-  try {
-    const r = await fetch(API + '/api/activities');
-    activities = await r.json();
+async function loadActivities(){
+  try{
+    const r=await fetch(API+'/api/activities');
+    activities=await r.json();
     renderPins();
-  } catch(e) {}
+  }catch(e){}
 }
 
-function renderPins() {
-  map.eachLayer(l => { if (l._isPin) map.removeLayer(l); });
-  activities.forEach(a => {
-    if (!a.latitude || !a.longitude) return;
-    const t = TYPES[a.title] || TYPES['Другое'];
-    const icon = L.divIcon({
-      html: `<div style="background:${t.color};width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 4px 12px rgba(0,0,0,0.4);border:3px solid white">${t.icon}</div>`,
-      iconSize:[40,40], iconAnchor:[20,20], className:''
+async function loadMatchCount(){
+  if(!me)return;
+  try{
+    const r=await fetch(API+'/api/matches/'+me.telegram_id);
+    const m=await r.json();
+    document.getElementById('match-count').textContent=Array.isArray(m)?m.length:0;
+  }catch(e){}
+}
+
+function renderPins(){
+  map.eachLayer(l=>{if(l._isPin)map.removeLayer(l);});
+  activities.forEach(a=>{
+    if(!a.latitude||!a.longitude)return;
+    const t=TYPES[a.title]||TYPES['Другое'];
+    const icon=L.divIcon({
+      html:`<div style="background:${t.color};width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 16px ${t.color}66;border:2px solid rgba(255,255,255,0.2)">${t.icon}</div>`,
+      iconSize:[44,44],iconAnchor:[22,22],className:''
     });
-    const marker = L.marker([a.latitude, a.longitude], {icon}).addTo(map);
-    marker._isPin = true;
-    marker.on('click', () => openPinDetail(a));
+    const m=L.marker([a.latitude,a.longitude],{icon}).addTo(map);
+    m._isPin=true;
+    m.on('click',()=>showPinDetail(a));
   });
 }
 
-function openPinDetail(a) {
-  const t = TYPES[a.title] || TYPES['Другое'];
-  const expires = new Date(a.expires_at);
-  const mins = Math.max(0, Math.floor((expires - Date.now()) / 60000));
-  const timeStr = mins > 60 ? Math.floor(mins/60) + ' ч.' : mins + ' мин.';
-  document.getElementById('sheet-content').innerHTML = `
-    <div style="text-align:center;margin-bottom:20px">
-      <div style="font-size:56px;margin-bottom:8px">${t.icon}</div>
-      <div style="font-size:20px;font-weight:900">${a.title}</div>
-      ${a.description ? `<div style="color:#8888aa;margin-top:6px;font-size:14px">${a.description}</div>` : ''}
-      <div style="color:#ff8c42;font-size:13px;font-weight:700;margin-top:8px">⏱ Через ${timeStr}</div>
+function showPinDetail(a){
+  const t=TYPES[a.title]||TYPES['Другое'];
+  const mins=Math.max(0,Math.floor((new Date(a.expires_at)-Date.now())/60000));
+  const timeStr=mins>60?Math.floor(mins/60)+' ч.':mins+' мин.';
+  document.getElementById('sheet-body').innerHTML=`
+    <div style="text-align:center;padding:8px 0 24px">
+      <div style="width:80px;height:80px;background:${t.color}22;border-radius:24px;display:flex;align-items:center;justify-content:center;font-size:40px;margin:0 auto 16px">${t.icon}</div>
+      <div style="font-family:'Unbounded',sans-serif;font-size:18px;font-weight:700">${a.title}</div>
+      ${a.description?`<div style="color:var(--muted);margin-top:8px;font-size:14px;line-height:1.6">${a.description}</div>`:''}
+      <div style="display:inline-block;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.3);border-radius:20px;padding:6px 16px;font-size:12px;color:#ff6b35;font-weight:600;margin-top:12px">⏱ Через ${timeStr}</div>
     </div>
-    <button onclick="closeSheet()" style="width:100%;background:linear-gradient(135deg,#ff4d6d,#ff8c42);border:none;border-radius:16px;padding:16px;color:#fff;font-family:'Nunito',sans-serif;font-size:16px;font-weight:800;cursor:pointer">
-      Присоединиться 🙌
-    </button>
+    <button class="btn-primary" onclick="closeSheet()">Присоединиться 🙌</button>
   `;
   openSheet();
 }
 
-function openSheet(type) {
-  if (type === 'add') {
-    navigator.geolocation.getCurrentPosition(pos => {
-      showAddForm(pos.coords.latitude, pos.coords.longitude);
-    }, () => {
-      showAddForm(42.8746, 74.5698);
+function openAdd(){
+  navigator.geolocation.getCurrentPosition(
+    pos=>showAddForm(pos.coords.latitude,pos.coords.longitude),
+    ()=>showAddForm(42.8746,74.5698)
+  );
+}
+
+function showAddForm(lat,lng){
+  const pills=Object.keys(TYPES).map(k=>
+    `<div class="pill ${k===selectedType?'active':''}" onclick="selType('${k}',this)">${TYPES[k].icon} ${k}</div>`
+  ).join('');
+  document.getElementById('sheet-body').innerHTML=`
+    <div class="section-title">Новая активность</div>
+    <div class="pills">${pills}</div>
+    <input class="input" id="act-desc" placeholder="Подробности..."/>
+    <button class="btn-primary" onclick="submitAct(${lat},${lng})">Опубликовать 🚀</button>
+  `;
+  openSheet();
+}
+
+function selType(t,el){
+  selectedType=t;
+  document.querySelectorAll('.pill').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+}
+
+async function submitAct(lat,lng){
+  if(!me){tg?.showAlert('Сначала зарегистрируйся через бота @Connectkgbot');return;}
+  const desc=document.getElementById('act-desc')?.value||'';
+  try{
+    await fetch(API+'/api/activities',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({user_id:me.telegram_id,title:selectedType,description:desc,latitude:lat,longitude:lng})
     });
-  }
+    closeSheet();loadActivities();
+  }catch(e){}
+}
+
+function openSheet(){
   document.getElementById('sheet').classList.add('open');
   document.getElementById('overlay').classList.add('open');
 }
-
-function showAddForm(lat, lng) {
-  const pills = Object.keys(TYPES).map(k =>
-    `<div class="pill ${k===selectedType?'active':''}" onclick="selectType('${k}')">${TYPES[k].icon} ${k}</div>`
-  ).join('');
-  document.getElementById('sheet-content').innerHTML = `
-    <div class="section-title">Что предлагаешь? 🎯</div>
-    <div class="type-pills" id="type-pills">${pills}</div>
-    <div class="input-row">
-      <input id="act-desc" placeholder="Подробности (необязательно)..."/>
-    </div>
-    <button onclick="submitActivity(${lat},${lng})" style="width:100%;background:linear-gradient(135deg,#ff4d6d,#ff8c42);border:none;border-radius:16px;padding:16px;color:#fff;font-family:'Nunito',sans-serif;font-size:16px;font-weight:800;cursor:pointer">
-      Опубликовать 🚀
-    </button>
-  `;
-}
-
-function selectType(t) {
-  selectedType = t;
-  document.querySelectorAll('.pill').forEach(p => {
-    p.classList.toggle('active', p.textContent.includes(t));
-  });
-}
-
-async function submitActivity(lat, lng) {
-  if (!me) { alert('Сначала зарегистрируйся через бота @connectkg'); return; }
-  const desc = document.getElementById('act-desc')?.value || '';
-  try {
-    await fetch(API + '/api/activities', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        user_id: me.telegram_id,
-        title: selectedType,
-        description: desc,
-        latitude: lat,
-        longitude: lng,
-      })
-    });
-    closeSheet();
-    loadActivities();
-  } catch(e) { alert('Ошибка, попробуй ещё раз'); }
-}
-
-function closeSheet() {
+function closeSheet(){
   document.getElementById('sheet').classList.remove('open');
   document.getElementById('overlay').classList.remove('open');
 }
 
-function switchTab(tab) {
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+function switchTab(tab){
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('btn-'+tab)?.classList.add('active');
-  if (tab === 'meets') showMeets();
-  else if (tab === 'matches') showMatches();
-  else if (tab === 'profile') showProfile();
+  if(tab==='meets')showMeets();
+  else if(tab==='matches')showMatches();
+  else if(tab==='profile')showProfile();
   else closeSheet();
 }
 
-async function showMeets() {
-  const items = activities.map(a => {
-    const t = TYPES[a.title] || TYPES['Другое'];
-    const expires = new Date(a.expires_at);
-    const mins = Math.max(0, Math.floor((expires - Date.now()) / 60000));
-    return `<div class="pin-card" onclick="map.setView([${a.latitude||42.87},${a.longitude||74.57}],15);closeSheet()">
-      <div class="pin-icon" style="background:${t.color}22">${t.icon}</div>
-      <div class="pin-info">
-        <div class="pin-name">${a.title}</div>
-        ${a.description ? `<div class="pin-desc">${a.description}</div>` : ''}
-        <div class="pin-time">⏱ ${mins > 60 ? Math.floor(mins/60)+' ч.' : mins+' мин.'}</div>
+function showMeets(){
+  const items=activities.length?activities.map(a=>{
+    const t=TYPES[a.title]||TYPES['Другое'];
+    const mins=Math.max(0,Math.floor((new Date(a.expires_at)-Date.now())/60000));
+    return`<div class="card" onclick="map.setView([${a.latitude||42.87},${a.longitude||74.57}],15);closeSheet()">
+      <div class="card-icon" style="background:${t.color}22">${t.icon}</div>
+      <div style="flex:1">
+        <div class="card-title">${a.title}</div>
+        ${a.description?`<div class="card-sub">${a.description}</div>`:''}
+        <div class="card-time">⏱ ${mins>60?Math.floor(mins/60)+' ч.':mins+' мин.'}</div>
       </div>
-      <button class="join-btn">Иду!</button>
     </div>`;
-  }).join('') || '<div style="text-align:center;padding:40px;color:#555">Пока нет активностей 🌙<br>Будь первым!</div>';
-  document.getElementById('sheet-content').innerHTML = `<div class="section-title">Активности рядом 🗺</div>${items}`;
+  }).join(''):`<div class="empty"><div class="empty-icon">🌙</div><div class="empty-title">Пока тихо</div><div class="empty-sub">Будь первым кто предложит активность!</div></div>`;
+  document.getElementById('sheet-body').innerHTML=`<div class="section-title">Активности рядом</div>${items}`;
   openSheet();
 }
 
-async function showMatches() {
-  if (!me) return;
-  try {
-    const r = await fetch(API + '/api/matches/' + me.telegram_id);
-    const matches = await r.json();
-    const items = matches.map(m => `
-      <div class="pin-card">
-        <div class="pin-icon" style="background:rgba(255,77,109,0.15)">${m.partner?.gender==='male'?'👨':'👩'}</div>
-        <div class="pin-info">
-          <div class="pin-name">${m.partner?.name||'?'}</div>
-          <div class="pin-desc">${m.partner?.age} лет · ${m.partner?.city}</div>
+async function showMatches(){
+  if(!me){
+    document.getElementById('sheet-body').innerHTML=`<div class="empty"><div class="empty-icon">💌</div><div class="empty-title">Войди через бота</div><div class="empty-sub">Открой @Connectkgbot и зарегистрируйся</div></div>`;
+    openSheet();return;
+  }
+  try{
+    const r=await fetch(API+'/api/matches/'+me.telegram_id);
+    const matches=await r.json();
+    const items=Array.isArray(matches)&&matches.length?matches.map(m=>`
+      <div class="card">
+        <div class="card-icon" style="background:rgba(255,45,85,0.1)">${m.partner?.gender==='male'?'👨':'👩'}</div>
+        <div style="flex:1">
+          <div class="card-title">${m.partner?.name||'?'}</div>
+          <div class="card-sub">${m.partner?.age} лет · ${m.partner?.city}</div>
         </div>
-        ${m.partner?.username ? `<a href="https://t.me/${m.partner.username}" style="background:linear-gradient(135deg,#ff4d6d,#ff8c42);border-radius:12px;padding:8px 14px;color:#fff;font-weight:800;font-size:13px;text-decoration:none">Написать</a>` : ''}
+        ${m.partner?.username?`<a href="https://t.me/${m.partner.username}" style="background:linear-gradient(135deg,#ff2d55,#ff6b35);border-radius:12px;padding:8px 14px;color:#fff;font-weight:700;font-size:12px;text-decoration:none;white-space:nowrap">Написать</a>`:''}
       </div>
-    `).join('') || '<div style="text-align:center;padding:40px;color:#555">Пока нет матчей 💌<br>Лайкай в боте!</div>';
-    document.getElementById('sheet-content').innerHTML = `<div class="section-title">Твои матчи ❤️</div>${items}`;
+    `).join(''):`<div class="empty"><div class="empty-icon">💌</div><div class="empty-title">Пока нет матчей</div><div class="empty-sub">Лайкай анкеты в боте — и они появятся здесь!</div></div>`;
+    document.getElementById('sheet-body').innerHTML=`<div class="section-title">Твои матчи ❤️</div>${items}`;
     openSheet();
-  } catch(e) {}
+  }catch(e){}
 }
 
-async function showProfile() {
-  if (!me) {
-    document.getElementById('sheet-content').innerHTML = `
-      <div style="text-align:center;padding:40px">
-        <div style="font-size:56px">👤</div>
-        <div style="font-size:18px;font-weight:900;margin-top:12px">Нет профиля</div>
-        <div style="color:#555;margin-top:8px">Зарегистрируйся через @connectkg</div>
-      </div>`;
-    openSheet(); return;
+function showProfile(){
+  if(!me){
+    document.getElementById('sheet-body').innerHTML=`<div class="empty"><div class="empty-icon">👤</div><div class="empty-title">Нет профиля</div><div class="empty-sub">Зарегистрируйся через<br>@Connectkgbot</div></div>`;
+    openSheet();return;
   }
-  document.getElementById('sheet-content').innerHTML = `
-    <div style="text-align:center;margin-bottom:20px">
-      <div style="font-size:64px">${me.gender==='male'?'👨':'👩'}</div>
-      <div style="font-size:22px;font-weight:900;margin-top:8px">${me.name}</div>
-      <div style="color:#8888aa">${me.age} лет · ${me.city}</div>
+  document.getElementById('sheet-body').innerHTML=`
+    <div style="text-align:center;padding:8px 0 24px">
+      <div style="width:90px;height:90px;background:linear-gradient(135deg,rgba(255,45,85,0.2),rgba(255,107,53,0.2));border-radius:28px;display:flex;align-items:center;justify-content:center;font-size:44px;margin:0 auto 16px;border:1px solid rgba(255,45,85,0.2)">${me.gender==='male'?'👨':'👩'}</div>
+      <div style="font-family:'Unbounded',sans-serif;font-size:20px;font-weight:700">${me.name}</div>
+      <div style="color:var(--muted);margin-top:6px">${me.age} лет · ${me.city}</div>
+      <div style="display:inline-block;margin-top:12px;padding:6px 16px;border-radius:20px;font-size:12px;font-weight:600;${me.is_active?'background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);color:#10B981':'background:rgba(255,45,85,0.15);border:1px solid rgba(255,45,85,0.3);color:#ff2d55'}">${me.is_active?'✅ Активен':'⛔ Скрыт'}</div>
     </div>
-    <div style="background:rgba(255,77,109,0.1);border:1px solid rgba(255,77,109,0.2);border-radius:16px;padding:16px;text-align:center">
-      <div style="font-size:13px;color:#8888aa">Статус</div>
-      <div style="font-weight:800;color:${me.is_active?'#10B981':'#ff4d6d'};margin-top:4px">${me.is_active?'✅ Активен':'⛔ Скрыт'}</div>
+    <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:16px;padding:16px;text-align:center">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Подпишись на канал</div>
+      <a href="https://t.me/connectkg_channal" style="color:#4facfe;font-weight:600;font-size:14px;text-decoration:none">@connectkg_channal 🔔</a>
     </div>
   `;
   openSheet();
 }
 
-function updateMatchCount() {}
-
-async function updateMatchCount() {
-  if (!me) return;
-  try {
-    const r = await fetch(API + '/api/matches/' + me.telegram_id);
-    const m = await r.json();
-    document.getElementById('match-count').textContent = m.length || 0;
-  } catch(e) {}
-}
-
-// Геолокация пользователя
-navigator.geolocation.getCurrentPosition(pos => {
-  map.setView([pos.coords.latitude, pos.coords.longitude], 14);
-  L.circleMarker([pos.coords.latitude, pos.coords.longitude], {
-    radius:10, color:'#ff4d6d', fillColor:'#ff4d6d', fillOpacity:0.8, weight:3
-  }).addTo(map);
-}, () => {});
+// Геолокация
+navigator.geolocation.getCurrentPosition(pos=>{
+  const {latitude:lat,longitude:lng}=pos.coords;
+  map.setView([lat,lng],15);
+  const icon=L.divIcon({
+    html:`<div style="position:relative"><div class="pulse-ring"></div><div style="width:16px;height:16px;background:#ff2d55;border-radius:50%;border:3px solid #fff;box-shadow:0 0 12px rgba(255,45,85,0.8);position:relative;z-index:1"></div></div>`,
+    iconSize:[20,20],iconAnchor:[10,10],className:''
+  });
+  L.marker([lat,lng],{icon}).addTo(map);
+},()=>{});
 
 loadUser();
 loadActivities();
-setInterval(loadActivities, 15000);
+setInterval(loadActivities,15000);
 </script>
 </body>
 </html>
