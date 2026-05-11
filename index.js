@@ -3,24 +3,8 @@ const TelegramBot = require('node-telegram-bot-api');
 const Groq = require('groq-sdk');
 const express = require('express');
 const app = express();
-
-// ========================
-// EXPRESS MIDDLEWARE
-// ========================
-app.use(express.json());
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  if (req.method === 'OPTIONS') return res.sendStatus(200);
-  next();
-});
-
-// ========================
-// HEALTH CHECK
-// ========================
-app.get('/api/health', (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
-app.get('/', (req, res) => res.send('ConnectKG API is running'));
+app.get('/api/health', (req, res) => res.json({ ok: true }));
+app.listen(process.env.PORT || 3000);
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -535,4 +519,21 @@ bot.on('message', async (msg) => {
         telegram_id: id,
         username: msg.from.username || null,
         name: data.name, age: data.age, gender: data.gender,
-        looking_for: data.looking_for || (data.gender === 'мужской' ? 'женский' : 'му
+        looking_for: data.looking_for || (data.gender === 'мужской' ? 'женский' : 'мужской'),
+        about: data.about, photo_id: photo,
+        city: data.city || 'Кыргызстан',
+        is_active: true,
+        created_at: new Date().toISOString()
+      });
+      set(id, 'reg_location', { ...data });
+      return bot.sendMessage(id,
+        '📍 Последний шаг!\n\nОтправь геолокацию чтобы видеть людей рядом с тобой.\nИли пропусти этот шаг.',
+        locationKb
+      );
+    } catch (e) {
+      console.error('Ошибка создания:', e);
+      return bot.sendMessage(id, '❌ Ошибка. Попробуй /start');
+    }
+  }
+
+  // Редактирование
