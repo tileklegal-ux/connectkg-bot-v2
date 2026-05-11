@@ -3,8 +3,24 @@ const TelegramBot = require('node-telegram-bot-api');
 const Groq = require('groq-sdk');
 const express = require('express');
 const app = express();
-app.get('/api/health', (req, res) => res.json({ ok: true }));
-app.listen(process.env.PORT || 3000);
+
+// ========================
+// EXPRESS MIDDLEWARE
+// ========================
+app.use(express.json());
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
+
+// ========================
+// HEALTH CHECK
+// ========================
+app.get('/api/health', (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
+app.get('/', (req, res) => res.send('ConnectKG API is running'));
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -519,88 +535,4 @@ bot.on('message', async (msg) => {
         telegram_id: id,
         username: msg.from.username || null,
         name: data.name, age: data.age, gender: data.gender,
-        looking_for: data.looking_for || (data.gender === 'мужской' ? 'женский' : 'мужской'),
-        about: data.about, photo_id: photo,
-        city: data.city || 'Кыргызстан',
-        is_active: true,
-        created_at: new Date().toISOString()
-      });
-      set(id, 'reg_location', { ...data });
-      return bot.sendMessage(id,
-        '📍 Последний шаг!\n\nОтправь геолокацию чтобы видеть людей рядом с тобой.\nИли пропусти этот шаг.',
-        locationKb
-      );
-    } catch (e) {
-      console.error('Ошибка создания:', e);
-      return bot.sendMessage(id, '❌ Ошибка. Попробуй /start');
-    }
-  }
-
-  // Редактирование
-  if (step === 'edit_name') {
-    if (!text || text.length < 2 || text.length > 30) return bot.sendMessage(id, '⚠️ От 2 до 30:');
-    await updateUser(id, { name: text }); clear(id);
-    return bot.sendMessage(id, '✅ Имя обновлено!', mainMenu);
-  }
-  if (step === 'edit_age') {
-    const age = parseInt(text);
-    if (isNaN(age) || age < 16 || age > 80) return bot.sendMessage(id, '⚠️ 16-80:');
-    await updateUser(id, { age }); clear(id);
-    return bot.sendMessage(id, '✅ Возраст обновлён!', mainMenu);
-  }
-  if (step === 'edit_about') {
-    if (!text || text.length < 5 || text.length > 300) return bot.sendMessage(id, '⚠️ 5-300:');
-    await updateUser(id, { about: text }); clear(id);
-    return bot.sendMessage(id, '✅ Описание обновлено!', mainMenu);
-  }
-  if (step === 'edit_photo') {
-    if (msg.photo) {
-      await updateUser(id, { photo_id: msg.photo[msg.photo.length - 1].file_id });
-      clear(id);
-      return bot.sendMessage(id, '✅ Фото обновлено!', mainMenu);
-    }
-    return bot.sendMessage(id, '📸 Отправь фото:');
-  }
-  if (step === 'edit_city') {
-    if (!text || text.length < 2) return bot.sendMessage(id, '🏙 Напиши город:');
-    await updateUser(id, { city: text }); clear(id);
-    return bot.sendMessage(id, '✅ Город обновлён!', mainMenu);
-  }
-
-  // Admin
-  if (step === 'admin_broadcast' && ADMIN_IDS.includes(id)) {
-    const users = await db('users', 'GET', null, '?is_active=eq.true&select=telegram_id');
-    let s = 0, f = 0;
-    for (const u of users || []) {
-      try { await bot.sendMessage(u.telegram_id, '📢 *ConnectKG:*\n\n' + text, { parse_mode: 'Markdown' }); s++; }
-      catch { f++; }
-      await new Promise(r => setTimeout(r, 50));
-    }
-    clear(id);
-    return bot.sendMessage(id, '✅ Отправлено: ' + s + ', Ошибок: ' + f, mainMenu);
-  }
-  if (step === 'admin_add_ad_name' && ADMIN_IDS.includes(id)) {
-    set(id, 'admin_add_ad_desc', { ad_name: text });
-    return bot.sendMessage(id, '📝 Описание/оффер (например: Скидка 10% для пар):');
-  }
-  if (step === 'admin_add_ad_desc' && ADMIN_IDS.includes(id)) {
-    set(id, 'admin_add_ad_contact', { ...data, ad_desc: text });
-    return bot.sendMessage(id, '📞 Контакт (телефон или @username):');
-  }
-  if (step === 'admin_add_ad_contact' && ADMIN_IDS.includes(id)) {
-    await db('ads', 'POST', {
-      business_name: data.ad_name, description: data.ad_desc,
-      contact: text, active: true, created_at: new Date().toISOString()
-    });
-    clear(id);
-    return bot.sendMessage(id, '✅ Реклама *' + esc(data.ad_name) + '* добавлена!', { parse_mode: 'Markdown', ...adminKb });
-  }
-
-  const u = await getUser(id);
-  if (!u) { set(id, 'reg_name'); return bot.sendMessage(id, '📝 Как тебя зовут?'); }
-  return bot.sendMessage(id, '🏠 Главное меню', mainMenu);
-});
-
-bot.on('polling_error', (e) => console.error('Polling error:', e.message));
-process.on('unhandledRejection', (e) => console.error('Error:', e));
-console.log('ConnectKG готов!');
+        looking_for: data.looking_for || (data.gender === 'мужской' ? 'женский' : 'му
