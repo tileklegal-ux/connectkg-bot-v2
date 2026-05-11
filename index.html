@@ -7,399 +7,93 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{
-  --bg:#07080f;
-  --surface:#0d0e1a;
-  --card:#12132000;
-  --border:rgba(255,255,255,0.07);
-  --red:#ff1744;
-  --orange:#ff6d00;
-  --glow:rgba(255,23,68,0.35);
-  --text:#eeeeff;
-  --dim:#555577;
-}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;overflow:hidden}
-
-#map{position:fixed;inset:0;z-index:0}
-
-/* Вигет логотип */
-.logo-pill{
-  position:fixed;top:16px;left:50%;transform:translateX(-50%);
-  background:rgba(7,8,15,0.7);
-  backdrop-filter:blur(20px);
-  border:1px solid var(--border);
-  border-radius:20px;padding:8px 20px;
-  font-family:'Syne',sans-serif;font-weight:800;font-size:15px;
-  letter-spacing:1px;z-index:100;
-  display:flex;align-items:center;gap:8px;
-}
-.logo-dot{
-  width:8px;height:8px;border-radius:50%;
-  background:var(--red);
-  box-shadow:0 0 8px var(--red);
-  animation:blink 2s ease-in-out infinite;
-}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
-
-/* FAB */
-.fab{
-  position:fixed;right:20px;bottom:110px;
-  width:56px;height:56px;
-  background:linear-gradient(135deg,var(--red),var(--orange));
-  border:none;border-radius:18px;
-  font-size:26px;cursor:pointer;z-index:200;
-  box-shadow:0 6px 24px var(--glow);
-  transition:transform 0.15s,box-shadow 0.15s;
-  display:flex;align-items:center;justify-content:center;color:#fff;
-}
-.fab:active{transform:scale(0.9);box-shadow:0 2px 10px var(--glow)}
-
-/* Навигация */
-.nav{
-  position:fixed;bottom:0;left:0;right:0;z-index:200;
-  background:rgba(7,8,15,0.85);
-  backdrop-filter:blur(30px);
-  border-top:1px solid var(--border);
-  display:flex;align-items:center;justify-content:space-around;
-  padding:10px 0 26px;
-}
-.nb{
-  background:none;border:none;
-  display:flex;flex-direction:column;align-items:center;gap:4px;
-  cursor:pointer;padding:4px 16px;
-  transition:all 0.2s;
-}
-.nb-icon{
-  width:42px;height:42px;border-radius:13px;
-  display:flex;align-items:center;justify-content:center;
-  font-size:19px;transition:all 0.25s;
-  color:var(--dim);
-}
-.nb-label{font-size:10px;font-weight:500;color:var(--dim);letter-spacing:0.5px;transition:color 0.2s}
-.nb.on .nb-icon{
-  background:linear-gradient(135deg,rgba(255,23,68,0.18),rgba(255,109,0,0.18));
-  box-shadow:0 0 16px rgba(255,23,68,0.2);
-}
-.nb.on .nb-label{color:var(--red)}
-
-/* Бейдж */
-.badge{
-  position:absolute;top:0;right:0;
-  min-width:16px;height:16px;padding:0 4px;
-  background:var(--red);border-radius:8px;
-  font-size:9px;font-weight:800;
-  display:flex;align-items:center;justify-content:center;color:#fff;
-}
-
-/* Шторка */
-.sheet{
-  position:fixed;left:0;right:0;bottom:-100%;
-  background:var(--surface);
-  border-radius:24px 24px 0 0;
-  border-top:1px solid var(--border);
-  z-index:300;
-  transition:bottom 0.38s cubic-bezier(0.32,0.72,0,1);
-  max-height:86vh;overflow-y:auto;
-  padding:0 20px 120px;
-}
+html,body{height:100%;background:#07080f;color:#eeeeff;font-family:'DM Sans',sans-serif;overflow:hidden}
+#map{position:fixed;inset:0;z-index:0;filter:invert(1) hue-rotate(180deg) brightness(0.85) saturate(0.7)}
+.logo{position:fixed;top:16px;left:50%;transform:translateX(-50%);background:rgba(7,8,15,0.8);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:8px 20px;font-family:'Syne',sans-serif;font-weight:800;font-size:14px;letter-spacing:2px;z-index:100;display:flex;align-items:center;gap:8px}
+.dot{width:8px;height:8px;border-radius:50%;background:#ff1744;box-shadow:0 0 8px #ff1744;animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}
+.fab{position:fixed;right:20px;bottom:110px;width:56px;height:56px;background:linear-gradient(135deg,#ff1744,#ff6d00);border:none;border-radius:18px;font-size:26px;cursor:pointer;z-index:200;box-shadow:0 6px 24px rgba(255,23,68,0.5);display:flex;align-items:center;justify-content:center;color:#fff;transition:transform 0.15s}
+.fab:active{transform:scale(0.9)}
+.nav{position:fixed;bottom:0;left:0;right:0;z-index:200;background:rgba(7,8,15,0.9);backdrop-filter:blur(30px);border-top:1px solid rgba(255,255,255,0.07);display:flex;justify-content:space-around;padding:10px 0 26px}
+.nb{background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;padding:4px 16px}
+.nb-i{width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:19px;color:#555577;transition:all 0.2s}
+.nb-l{font-size:10px;font-weight:600;color:#555577;letter-spacing:0.5px;transition:color 0.2s}
+.nb.on .nb-i{background:rgba(255,23,68,0.15);box-shadow:0 0 16px rgba(255,23,68,0.2)}
+.nb.on .nb-l{color:#ff1744}
+.badge{position:absolute;top:0;right:0;min-width:16px;height:16px;padding:0 4px;background:#ff1744;border-radius:8px;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;color:#fff}
+.sheet{position:fixed;left:0;right:0;bottom:-100%;background:#0d0e1a;border-radius:24px 24px 0 0;border-top:1px solid rgba(255,255,255,0.07);z-index:300;transition:bottom 0.38s cubic-bezier(0.32,0.72,0,1);max-height:86vh;overflow-y:auto;padding:0 20px 120px}
 .sheet.up{bottom:0}
-.drag{width:32px;height:3px;background:rgba(255,255,255,0.12);border-radius:2px;margin:14px auto 22px}
-
-/* Оверлей */
-.ov{
-  position:fixed;inset:0;z-index:299;
-  background:rgba(0,0,0,0.55);
-  backdrop-filter:blur(3px);
-  display:none;
-}
+.drag{width:32px;height:3px;background:rgba(255,255,255,0.1);border-radius:2px;margin:14px auto 22px}
+.ov{position:fixed;inset:0;z-index:299;background:rgba(0,0,0,0.6);backdrop-filter:blur(3px);display:none}
 .ov.on{display:block}
-
-/* Карточки */
-.item{
-  display:flex;align-items:center;gap:14px;
-  padding:14px;border-radius:18px;
-  background:rgba(255,255,255,0.03);
-  border:1px solid var(--border);
-  margin-bottom:10px;cursor:pointer;
-  transition:background 0.2s;
-}
+.item{display:flex;align-items:center;gap:14px;padding:14px;border-radius:18px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);margin-bottom:10px;cursor:pointer;transition:background 0.2s}
 .item:active{background:rgba(255,23,68,0.07)}
-.item-ico{
-  width:50px;height:50px;border-radius:15px;
-  display:flex;align-items:center;justify-content:center;
-  font-size:22px;flex-shrink:0;
-}
-.item-name{font-family:'Syne',sans-serif;font-weight:700;font-size:13px}
-.item-sub{font-size:12px;color:var(--dim);margin-top:2px}
-.item-time{font-size:11px;color:var(--orange);margin-top:4px;font-weight:600}
-
-/* Кнопка */
-.btn{
-  width:100%;padding:17px;border:none;
-  background:linear-gradient(135deg,var(--red),var(--orange));
-  border-radius:17px;color:#fff;
-  font-family:'Syne',sans-serif;font-weight:700;font-size:14px;
-  cursor:pointer;letter-spacing:0.5px;
-  box-shadow:0 6px 20px var(--glow);
-  transition:transform 0.15s;
-}
+.ico{width:50px;height:50px;border-radius:15px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+.btn{width:100%;padding:17px;border:none;background:linear-gradient(135deg,#ff1744,#ff6d00);border-radius:17px;color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 6px 20px rgba(255,23,68,0.35);transition:transform 0.15s;letter-spacing:0.5px}
 .btn:active{transform:scale(0.97)}
-
-/* Инпут */
-.inp{
-  width:100%;padding:14px 16px;
-  background:rgba(255,255,255,0.04);
-  border:1px solid var(--border);
-  border-radius:14px;color:var(--text);
-  font-family:'DM Sans',sans-serif;font-size:14px;
-  outline:none;margin-bottom:14px;
-  transition:border-color 0.2s;
-}
+.inp{width:100%;padding:14px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px;color:#eeeeff;font-family:'DM Sans',sans-serif;font-size:14px;outline:none;margin-bottom:14px}
+.inp::placeholder{color:#555577}
 .inp:focus{border-color:rgba(255,23,68,0.4)}
-.inp::placeholder{color:var(--dim)}
-
-/* Пилюли */
 .pills{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
-.pill{
-  padding:7px 14px;border-radius:20px;font-size:13px;
-  background:rgba(255,255,255,0.04);
-  border:1px solid var(--border);
-  color:var(--dim);cursor:pointer;transition:all 0.18s;
-}
-.pill.on{
-  background:rgba(255,23,68,0.12);
-  border-color:rgba(255,23,68,0.4);
-  color:var(--red);
-}
-
-/* Заголовок */
-.h{
-  font-family:'Syne',sans-serif;font-weight:800;font-size:17px;
-  margin-bottom:20px;letter-spacing:0.3px;
-}
-
-/* Пустое */
+.pill{padding:7px 14px;border-radius:20px;font-size:13px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:#555577;cursor:pointer;transition:all 0.18s}
+.pill.on{background:rgba(255,23,68,0.12);border-color:rgba(255,23,68,0.4);color:#ff1744}
+.h{font-family:'Syne',sans-serif;font-weight:800;font-size:17px;margin-bottom:20px}
 .empty{text-align:center;padding:52px 16px}
-.empty .e-ico{font-size:48px;margin-bottom:14px;opacity:0.6}
-.empty .e-t{font-family:'Syne',sans-serif;font-weight:700;font-size:15px;margin-bottom:8px}
-.empty .e-s{font-size:13px;color:var(--dim);line-height:1.7}
-
-/* Пульс геолокации */
+.empty .ei{font-size:48px;margin-bottom:14px;opacity:0.6}
+.empty .et{font-family:'Syne',sans-serif;font-weight:700;font-size:15px;margin-bottom:8px}
+.empty .es{font-size:13px;color:#555577;line-height:1.7}
 @keyframes ripple{to{transform:scale(4);opacity:0}}
-.ripple{
-  position:absolute;inset:0;border-radius:50%;
-  background:rgba(255,23,68,0.25);
-  animation:ripple 2s ease-out infinite;
-}
+.ripple{position:absolute;inset:0;border-radius:50%;background:rgba(255,23,68,0.25);animation:ripple 2s ease-out infinite}
 </style>
 </head>
 <body>
-
 <div id="map"></div>
-
-<div class="logo-pill">
-  <div class="logo-dot"></div>
-  CONNECTKG
-</div>
-
+<div class="logo"><div class="dot"></div>CONNECTKG</div>
 <button class="fab" onclick="openAdd()">＋</button>
-
 <nav class="nav">
   <button class="nb on" id="nb-map" onclick="go('map')">
-    <div class="nb-icon">🗺</div>
-    <div class="nb-label">КАРТА</div>
+    <div class="nb-i">🗺</div><div class="nb-l">КАРТА</div>
   </button>
   <button class="nb" id="nb-meets" onclick="go('meets')">
-    <div class="nb-icon">📅</div>
-    <div class="nb-label">ВСТРЕЧИ</div>
+    <div class="nb-i">📅</div><div class="nb-l">ВСТРЕЧИ</div>
   </button>
   <button class="nb" id="nb-matches" onclick="go('matches')">
-    <div class="nb-icon" style="position:relative">
-      ❤️<span class="badge" id="mc">0</span>
-    </div>
-    <div class="nb-label">МАТЧИ</div>
+    <div class="nb-i" style="position:relative">❤️<span class="badge" id="mc">0</span></div>
+    <div class="nb-l">МАТЧИ</div>
   </button>
   <button class="nb" id="nb-profile" onclick="go('profile')">
-    <div class="nb-icon">👤</div>
-    <div class="nb-label">Я</div>
+    <div class="nb-i">👤</div><div class="nb-l">Я</div>
   </button>
 </nav>
-
 <div class="ov" id="ov" onclick="closeSheet()"></div>
-<div class="sheet" id="sheet">
-  <div class="drag"></div>
-  <div id="sb"></div>
-</div>
-
+<div class="sheet" id="sheet"><div class="drag"></div><div id="sb"></div></div>
 <script>
-const tg=window.Telegram?.WebApp;
-const tgU=tg?.initDataUnsafe?.user;
-const API='https://connectkg-bot.bonto.run';
-tg?.expand?.();
-tg?.setHeaderColor?.('#07080f');
-tg?.setBackgroundColor?.('#07080f');
-
+const tg=window.Telegram?.WebApp,tgU=tg?.initDataUnsafe?.user,API='https://connectkg-bot.bonto.run';
+tg?.expand?.();tg?.setHeaderColor?.('#07080f');tg?.setBackgroundColor?.('#07080f');
 let map,acts=[],me=null,selType='Кофе';
-
-const T={
-  'Кофе':    {i:'☕',c:'#8B5CF6'},
-  'Прогулка':{i:'🚶',c:'#10B981'},
-  'Кино':    {i:'🎬',c:'#F59E0B'},
-  'Еда':     {i:'🍕',c:'#EF4444'},
-  'Спорт':   {i:'🏃',c:'#3B82F6'},
-  'Другое':  {i:'✨',c:'#EC4899'},
-};
-
-// Тёмная карта Carto
+const T={'Кофе':{i:'☕',c:'#8B5CF6'},'Прогулка':{i:'🚶',c:'#10B981'},'Кино':{i:'🎬',c:'#F59E0B'},'Еда':{i:'🍕',c:'#EF4444'},'Спорт':{i:'🏃',c:'#3B82F6'},'Другое':{i:'✨',c:'#EC4899'}};
 map=L.map('map',{zoomControl:false,attributionControl:false}).setView([42.8746,74.5698],14);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_matter_no_labels/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_matter_only_labels/{z}/{x}/{y}{r}.png',{maxZoom:19,opacity:0.7}).addTo(map);
-
-async function loadUser(){
-  if(!tgU?.id)return;
-  try{const r=await fetch(API+'/api/user/'+tgU.id);const d=await r.json();if(!d.error){me=d;loadMC();}}catch(e){}
-}
-async function loadActs(){
-  try{const r=await fetch(API+'/api/activities');acts=await r.json();pins();}catch(e){}
-}
-async function loadMC(){
-  if(!me)return;
-  try{const r=await fetch(API+'/api/matches/'+me.telegram_id);const m=await r.json();document.getElementById('mc').textContent=Array.isArray(m)?m.length:0;}catch(e){}
-}
-
-function pins(){
-  map.eachLayer(l=>{if(l._p)map.removeLayer(l);});
-  acts.forEach(a=>{
-    if(!a.latitude||!a.longitude)return;
-    const t=T[a.title]||T['Другое'];
-    const ico=L.divIcon({
-      html:`<div style="width:46px;height:46px;background:${t.c};border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 20px ${t.c}88;border:2px solid rgba(255,255,255,0.15)">${t.i}</div>`,
-      iconSize:[46,46],iconAnchor:[23,23],className:''
-    });
-    const mk=L.marker([a.latitude,a.longitude],{icon:ico}).addTo(map);
-    mk._p=true;mk.on('click',()=>detail(a));
-  });
-}
-
-function detail(a){
-  const t=T[a.title]||T['Другое'];
-  const mins=Math.max(0,Math.floor((new Date(a.expires_at)-Date.now())/60000));
-  const ts=mins>60?Math.floor(mins/60)+' ч.':mins+' мин.';
-  document.getElementById('sb').innerHTML=`
-    <div style="text-align:center;padding:4px 0 24px">
-      <div style="width:76px;height:76px;background:${t.c}22;border-radius:22px;display:flex;align-items:center;justify-content:center;font-size:38px;margin:0 auto 14px;border:1px solid ${t.c}44">${t.i}</div>
-      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:19px">${a.title}</div>
-      ${a.description?`<div style="color:var(--dim);margin-top:8px;font-size:14px;line-height:1.6">${a.description}</div>`:''}
-      <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,109,0,0.1);border:1px solid rgba(255,109,0,0.25);border-radius:20px;padding:6px 14px;font-size:12px;color:#ff6d00;font-weight:600;margin-top:12px">⏱ Через ${ts}</div>
-    </div>
-    <button class="btn" onclick="closeSheet()">Присоединиться 🙌</button>`;
-  openSheet();
-}
-
-function openAdd(){
-  navigator.geolocation.getCurrentPosition(
-    p=>addForm(p.coords.latitude,p.coords.longitude),
-    ()=>addForm(42.8746,74.5698)
-  );
-}
-function addForm(lat,lng){
-  const ps=Object.keys(T).map(k=>`<div class="pill ${k===selType?'on':''}" onclick="pickType('${k}',this)">${T[k].i} ${k}</div>`).join('');
-  document.getElementById('sb').innerHTML=`
-    <div class="h">Новая активность ✨</div>
-    <div class="pills">${ps}</div>
-    <input class="inp" id="ad" placeholder="Подробности (необязательно)..."/>
-    <button class="btn" onclick="postAct(${lat},${lng})">Опубликовать 🚀</button>`;
-  openSheet();
-}
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+async function loadUser(){if(!tgU?.id)return;try{const r=await fetch(API+'/api/user/'+tgU.id),d=await r.json();if(!d.error){me=d;loadMC();}}catch(e){}}
+async function loadActs(){try{const r=await fetch(API+'/api/activities');acts=await r.json();pins();}catch(e){}}
+async function loadMC(){if(!me)return;try{const r=await fetch(API+'/api/matches/'+me.telegram_id),m=await r.json();document.getElementById('mc').textContent=Array.isArray(m)?m.length:0;}catch(e){}}
+function pins(){map.eachLayer(l=>{if(l._p)map.removeLayer(l);});acts.forEach(a=>{if(!a.latitude||!a.longitude)return;const t=T[a.title]||T['Другое'];const ic=L.divIcon({html:`<div style="width:46px;height:46px;background:${t.c};border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 20px ${t.c}88;border:2px solid rgba(255,255,255,0.15)">${t.i}</div>`,iconSize:[46,46],iconAnchor:[23,23],className:''});const mk=L.marker([a.latitude,a.longitude],{icon:ic}).addTo(map);mk._p=true;mk.on('click',()=>detail(a));});}
+function detail(a){const t=T[a.title]||T['Другое'];const mins=Math.max(0,Math.floor((new Date(a.expires_at)-Date.now())/60000));const ts=mins>60?Math.floor(mins/60)+' ч.':mins+' мин.';document.getElementById('sb').innerHTML=`<div style="text-align:center;padding:4px 0 24px"><div style="width:76px;height:76px;background:${t.c}22;border-radius:22px;display:flex;align-items:center;justify-content:center;font-size:38px;margin:0 auto 14px">${t.i}</div><div style="font-family:'Syne',sans-serif;font-weight:800;font-size:19px">${a.title}</div>${a.description?`<div style="color:#555577;margin-top:8px;font-size:14px">${a.description}</div>`:''}<div style="display:inline-block;background:rgba(255,109,0,0.1);border:1px solid rgba(255,109,0,0.25);border-radius:20px;padding:6px 14px;font-size:12px;color:#ff6d00;font-weight:600;margin-top:12px">⏱ Через ${ts}</div></div><button class="btn" onclick="closeSheet()">Присоединиться 🙌</button>`;openSheet();}
+function openAdd(){navigator.geolocation.getCurrentPosition(p=>addForm(p.coords.latitude,p.coords.longitude),()=>addForm(42.8746,74.5698));}
+function addForm(lat,lng){const ps=Object.keys(T).map(k=>`<div class="pill ${k===selType?'on':''}" onclick="pickType('${k}',this)">${T[k].i} ${k}</div>`).join('');document.getElementById('sb').innerHTML=`<div class="h">Новая активность ✨</div><div class="pills">${ps}</div><input class="inp" id="ad" placeholder="Подробности..."/><button class="btn" onclick="postAct(${lat},${lng})">Опубликовать 🚀</button>`;openSheet();}
 function pickType(t,el){selType=t;document.querySelectorAll('.pill').forEach(p=>p.classList.remove('on'));el.classList.add('on');}
-async function postAct(lat,lng){
-  if(!me){tg?.showAlert?.('Сначала зарегистрируйся через @Connectkgbot');return;}
-  const d=document.getElementById('ad')?.value||'';
-  try{
-    await fetch(API+'/api/activities',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({user_id:me.telegram_id,title:selType,description:d,latitude:lat,longitude:lng})});
-    closeSheet();loadActs();
-  }catch(e){}
-}
-
+async function postAct(lat,lng){if(!me){tg?.showAlert?.('Зарегистрируйся через @Connectkgbot');return;}const d=document.getElementById('ad')?.value||'';try{await fetch(API+'/api/activities',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:me.telegram_id,title:selType,description:d,latitude:lat,longitude:lng})});closeSheet();loadActs();}catch(e){}}
 function openSheet(){document.getElementById('sheet').classList.add('up');document.getElementById('ov').classList.add('on');}
 function closeSheet(){document.getElementById('sheet').classList.remove('up');document.getElementById('ov').classList.remove('on');}
-
-function go(tab){
-  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
-  document.getElementById('nb-'+tab)?.classList.add('on');
-  if(tab==='meets')meets();
-  else if(tab==='matches')matches();
-  else if(tab==='profile')profile();
-  else closeSheet();
-}
-
-function meets(){
-  const html=acts.length?acts.map(a=>{
-    const t=T[a.title]||T['Другое'];
-    const mins=Math.max(0,Math.floor((new Date(a.expires_at)-Date.now())/60000));
-    return`<div class="item" onclick="map.setView([${a.latitude||42.87},${a.longitude||74.57}],16);closeSheet()">
-      <div class="item-ico" style="background:${t.c}22">${t.i}</div>
-      <div style="flex:1"><div class="item-name">${a.title}</div>${a.description?`<div class="item-sub">${a.description}</div>`:''}<div class="item-time">⏱ ${mins>60?Math.floor(mins/60)+' ч.':mins+' мин.'}</div></div>
-    </div>`;
-  }).join(''):`<div class="empty"><div class="e-ico">🌃</div><div class="e-t">Пока тихо</div><div class="e-s">Будь первым кто предложит активность в Бишкеке!</div></div>`;
-  document.getElementById('sb').innerHTML=`<div class="h">Активности рядом</div>${html}`;
-  openSheet();
-}
-
-async function matches(){
-  if(!me){
-    document.getElementById('sb').innerHTML=`<div class="empty"><div class="e-ico">💌</div><div class="e-t">Войди через бота</div><div class="e-s">Открой @Connectkgbot</div></div>`;
-    openSheet();return;
-  }
-  try{
-    const r=await fetch(API+'/api/matches/'+me.telegram_id);
-    const ms=await r.json();
-    const html=Array.isArray(ms)&&ms.length?ms.map(m=>`
-      <div class="item">
-        <div class="item-ico" style="background:rgba(255,23,68,0.1)">${m.partner?.gender==='male'?'👨':'👩'}</div>
-        <div style="flex:1"><div class="item-name">${m.partner?.name||'?'}</div><div class="item-sub">${m.partner?.age} лет · ${m.partner?.city}</div></div>
-        ${m.partner?.username?`<a href="https://t.me/${m.partner.username}" style="background:linear-gradient(135deg,#ff1744,#ff6d00);border-radius:12px;padding:8px 14px;color:#fff;font-weight:700;font-size:12px;text-decoration:none">Написать</a>`:''}
-      </div>`).join(''):`<div class="empty"><div class="e-ico">💌</div><div class="e-t">Пока нет матчей</div><div class="e-s">Лайкай анкеты в боте!</div></div>`;
-    document.getElementById('sb').innerHTML=`<div class="h">Твои матчи ❤️</div>${html}`;
-    openSheet();
-  }catch(e){}
-}
-
-function profile(){
-  const html=me?`
-    <div style="text-align:center;padding:4px 0 24px">
-      <div style="width:88px;height:88px;background:linear-gradient(135deg,rgba(255,23,68,0.15),rgba(255,109,0,0.15));border-radius:26px;display:flex;align-items:center;justify-content:center;font-size:42px;margin:0 auto 16px;border:1px solid rgba(255,23,68,0.15)">${me.gender==='male'?'👨':'👩'}</div>
-      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:21px">${me.name}</div>
-      <div style="color:var(--dim);margin-top:6px;font-size:14px">${me.age} лет · ${me.city}</div>
-      <div style="display:inline-flex;align-items:center;gap:6px;margin-top:12px;padding:6px 16px;border-radius:20px;font-size:12px;font-weight:600;${me.is_active?'background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.25);color:#10B981':'background:rgba(255,23,68,0.1);border:1px solid rgba(255,23,68,0.25);color:#ff1744'}">${me.is_active?'✅ Активен':'⛔ Скрыт'}</div>
-    </div>
-    <div style="background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:16px;padding:16px;text-align:center">
-      <div style="font-size:12px;color:var(--dim);margin-bottom:6px">🔔 Подпишись на канал</div>
-      <a href="https://t.me/connectkg_channal" style="color:#4facfe;font-weight:700;font-size:14px;text-decoration:none">@connectkg_channal</a>
-    </div>`
-  :`<div class="empty"><div class="e-ico">👤</div><div class="e-t">Нет профиля</div><div class="e-s">Зарегистрируйся через<br>@Connectkgbot</div></div>`;
-  document.getElementById('sb').innerHTML=`<div class="h">Профиль</div>${html}`;
-  openSheet();
-}
-
-// Геолокация пользователя
-navigator.geolocation.getCurrentPosition(p=>{
-  const{latitude:lat,longitude:lng}=p.coords;
-  map.setView([lat,lng],15);
-  const ico=L.divIcon({
-    html:`<div style="position:relative;width:20px;height:20px"><div class="ripple"></div><div style="position:absolute;inset:3px;background:#ff1744;border-radius:50%;border:2px solid #fff;box-shadow:0 0 10px #ff1744"></div></div>`,
-    iconSize:[20,20],iconAnchor:[10,10],className:''
-  });
-  L.marker([lat,lng],{icon:ico}).addTo(map);
-},()=>{});
-
-loadUser();
-loadActs();
-setInterval(loadActs,15000);
+function go(tab){document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));document.getElementById('nb-'+tab)?.classList.add('on');if(tab==='meets')meets();else if(tab==='matches')matches();else if(tab==='profile')profile();else closeSheet();}
+function meets(){const html=acts.length?acts.map(a=>{const t=T[a.title]||T['Другое'];const mins=Math.max(0,Math.floor((new Date(a.expires_at)-Date.now())/60000));return`<div class="item" onclick="map.setView([${a.latitude||42.87},${a.longitude||74.57}],16);closeSheet()"><div class="ico" style="background:${t.c}22">${t.i}</div><div style="flex:1"><div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px">${a.title}</div>${a.description?`<div style="font-size:12px;color:#555577;margin-top:2px">${a.description}</div>`:''}<div style="font-size:11px;color:#ff6d00;margin-top:4px;font-weight:600">⏱ ${mins>60?Math.floor(mins/60)+' ч.':mins+' мин.'}</div></div></div>`;}).join(''):`<div class="empty"><div class="ei">🌃</div><div class="et">Пока тихо</div><div class="es">Будь первым!</div></div>`;document.getElementById('sb').innerHTML=`<div class="h">Активности рядом</div>${html}`;openSheet();}
+async function matches(){if(!me){document.getElementById('sb').innerHTML=`<div class="empty"><div class="ei">💌</div><div class="et">Войди через бота</div><div class="es">@Connectkgbot</div></div>`;openSheet();return;}try{const r=await fetch(API+'/api/matches/'+me.telegram_id),ms=await r.json();const html=Array.isArray(ms)&&ms.length?ms.map(m=>`<div class="item"><div class="ico" style="background:rgba(255,23,68,0.1)">${m.partner?.gender==='male'?'👨':'👩'}</div><div style="flex:1"><div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px">${m.partner?.name||'?'}</div><div style="font-size:12px;color:#555577">${m.partner?.age} лет · ${m.partner?.city}</div></div>${m.partner?.username?`<a href="https://t.me/${m.partner.username}" style="background:linear-gradient(135deg,#ff1744,#ff6d00);border-radius:12px;padding:8px 14px;color:#fff;font-weight:700;font-size:12px;text-decoration:none">Написать</a>`:''}</div>`).join(''):`<div class="empty"><div class="ei">💌</div><div class="et">Пока нет матчей</div><div class="es">Лайкай в боте!</div></div>`;document.getElementById('sb').innerHTML=`<div class="h">Твои матчи ❤️</div>${html}`;openSheet();}catch(e){}}
+function profile(){const html=me?`<div style="text-align:center;padding:4px 0 24px"><div style="width:88px;height:88px;background:linear-gradient(135deg,rgba(255,23,68,0.15),rgba(255,109,0,0.15));border-radius:26px;display:flex;align-items:center;justify-content:center;font-size:42px;margin:0 auto 16px">${me.gender==='male'?'👨':'👩'}</div><div style="font-family:'Syne',sans-serif;font-weight:800;font-size:21px">${me.name}</div><div style="color:#555577;margin-top:6px">${me.age} лет · ${me.city}</div></div><div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:16px;text-align:center"><div style="font-size:12px;color:#555577;margin-bottom:6px">🔔 Подпишись на канал</div><a href="https://t.me/connectkg_channal" style="color:#4facfe;font-weight:700;font-size:14px;text-decoration:none">@connectkg_channal</a></div>`:`<div class="empty"><div class="ei">👤</div><div class="et">Нет профиля</div><div class="es">Зарегистрируйся через @Connectkgbot</div></div>`;document.getElementById('sb').innerHTML=`<div class="h">Профиль</div>${html}`;openSheet();}
+navigator.geolocation.getCurrentPosition(p=>{const{latitude:lat,longitude:lng}=p.coords;map.setView([lat,lng],15);const ic=L.divIcon({html:`<div style="position:relative;width:20px;height:20px"><div class="ripple"></div><div style="position:absolute;inset:3px;background:#ff1744;border-radius:50%;border:2px solid #fff;box-shadow:0 0 10px #ff1744"></div></div>`,iconSize:[20,20],iconAnchor:[10,10],className:''});L.marker([lat,lng],{icon:ic}).addTo(map);},()=>{});
+loadUser();loadActs();setInterval(loadActs,15000);
 </script>
 </body>
 </html>
