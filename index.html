@@ -55,7 +55,7 @@ html,body{height:100%;background:#07080f;color:#eeeeff;font-family:'DM Sans',san
 .chat-row input{flex:1;padding:12px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px;color:#eeeeff;font-size:14px;outline:none}
 .chat-row input:focus{border-color:rgba(255,23,68,0.4)}
 .chat-row button{width:46px;height:46px;border:none;background:linear-gradient(135deg,#ff1744,#ff6d00);border-radius:14px;color:#fff;font-size:20px;cursor:pointer;flex-shrink:0}
-.toast{position:fixed;top:80px;left:50%;transform:translateX(-50%);background:rgba(13,14,26,0.95);border:1px solid rgba(255,255,255,0.1);border-radius:14px;padding:10px 20px;font-size:13px;z-index:999;opacity:0;transition:opacity 0.3s;pointer-events:none}
+.toast{position:fixed;top:80px;left:50%;transform:translateX(-50%);background:rgba(13,14,26,0.95);border:1px solid rgba(255,255,255,0.1);border-radius:14px;padding:10px 20px;font-size:13px;z-index:999;opacity:0;transition:opacity 0.3s;pointer-events:none;white-space:nowrap}
 .toast.show{opacity:1}
 .loader{display:flex;justify-content:center;padding:30px}
 .loader-dot{width:8px;height:8px;border-radius:50%;background:#ff1744;margin:0 4px;animation:bounce 1.2s infinite}
@@ -93,14 +93,10 @@ tg?.expand?.();tg?.setHeaderColor?.('#07080f');tg?.setBackgroundColor?.('#07080f
 let map,acts=[],me=null,selType='Кофе',chatWith=null,chatInterval=null,myLat=42.8746,myLng=74.5698;
 const T={'Кофе':{i:'☕',c:'#8B5CF6'},'Прогулка':{i:'🚶',c:'#10B981'},'Кино':{i:'🎬',c:'#F59E0B'},'Еда':{i:'🍕',c:'#EF4444'},'Спорт':{i:'🏃',c:'#3B82F6'},'Другое':{i:'✨',c:'#EC4899'}};
 
-// XSS защита
-function esc(t=''){return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
-
-// Toast уведомления
+function esc(t){if(!t)return'';return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function toast(msg,ms=2500){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),ms);}
-
-// Лоадер
-function loader(){return`<div class="loader"><div class="loader-dot"></div><div class="loader-dot"></div><div class="loader-dot"></div></div>`;}
+function loader(){return'<div class="loader"><div class="loader-dot"></div><div class="loader-dot"></div><div class="loader-dot"></div></div>';}
+function pinColor(u){if(!u)return{color:'#22c55e',shadow:'rgba(34,197,94,0.5)',emoji:'👤'};if(u.telegram_id==ADMIN_ID)return{color:'#FFD700',shadow:'rgba(255,215,0,0.6)',emoji:'👑'};if(u.gender==='мужской')return{color:'#22c55e',shadow:'rgba(34,197,94,0.5)',emoji:'👨'};return{color:'#f472b6',shadow:'rgba(244,114,182,0.5)',emoji:'👩'};}
 
 map=L.map('map',{zoomControl:false,attributionControl:false}).setView([42.8746,74.5698],14);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
@@ -112,6 +108,27 @@ async function loadUser(){
     const d=await r.json();
     if(!d.error){me=d;loadMC();}
   }catch(e){console.error('loadUser:',e);}
+}
+
+async function loadMC(){
+  if(!me)return;
+  try{
+    const r=await fetch(API+'/api/matches/'+me.telegram_id);
+    const m=await r.json();
+    document.getElementById('mc').textContent=Array.isArray(m)?m.length:0;
+  }catch(e){console.error('loadMC:',e);}
+}
+
+function drawMyPin(){
+  const p=pinColor(me);
+  const statusHtml=me&&me.current_status?`<div style="position:absolute;top:-28px;left:50%;transform:translateX(-50%);background:rgba(13,14,26,0.92);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:3px 8px;font-size:10px;white-space:nowrap;color:#eeeeff">${esc(me.current_status)}</div>`:'';
+  const ic=L.divIcon({
+    html:`<div style="position:relative;display:flex;flex-direction:column;align-items:center">${statusHtml}<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,${p.color},${p.color}99);border:3px solid rgba(255,255,255,0.5);display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 0 0 4px ${p.shadow},0 4px 20px ${p.shadow}">${p.emoji}</div><div style="width:2px;height:10px;background:rgba(255,255,255,0.4)"></div></div>`,
+    iconSize:[44,62],iconAnchor:[22,62],className:''
+  });
+  const mk=L.marker([myLat,myLng],{icon:ic}).addTo(map);
+  mk._p=true;
+  mk.on('click',()=>{if(me)userCard(me);});
 }
 
 async function loadActs(){
@@ -129,15 +146,11 @@ async function loadMapUsers(){
     if(!Array.isArray(users))return;
     users.forEach(u=>{
       if(!u.latitude||!u.longitude)return;
-      if(me&&u.telegram_id===me.telegram_id)return;
-      const isAdm=u.telegram_id==ADMIN_ID;
-      const isMale=u.gender==='мужской';
-      const color=isAdm?'#FFD700':isMale?'#22c55e':'#f472b6';
-      const shadow=isAdm?'rgba(255,215,0,0.6)':isMale?'rgba(34,197,94,0.5)':'rgba(244,114,182,0.5)';
-      const emoji=isAdm?'👑':isMale?'👨':'👩';
-      const statusHtml=u.current_status?`<div style="position:absolute;top:-26px;left:50%;transform:translateX(-50%);background:rgba(13,14,26,0.92);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:3px 8px;font-size:10px;white-space:nowrap;color:#eeeeff;backdrop-filter:blur(10px)">${esc(u.current_status)}</div>`:'';
+      if(me&&u.telegram_id==me.telegram_id)return;
+      const p=pinColor(u);
+      const statusHtml=u.current_status?`<div style="position:absolute;top:-26px;left:50%;transform:translateX(-50%);background:rgba(13,14,26,0.92);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:3px 8px;font-size:10px;white-space:nowrap;color:#eeeeff">${esc(u.current_status)}</div>`:'';
       const ic=L.divIcon({
-        html:`<div style="position:relative;display:flex;flex-direction:column;align-items:center">${statusHtml}<div style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,${color},${color}99);border:2px solid rgba(255,255,255,0.35);display:flex;align-items:center;justify-content:center;font-size:19px;box-shadow:0 4px 16px ${shadow}">${emoji}</div><div style="width:2px;height:9px;background:rgba(255,255,255,0.3)"></div></div>`,
+        html:`<div style="position:relative;display:flex;flex-direction:column;align-items:center">${statusHtml}<div style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,${p.color},${p.color}99);border:2px solid rgba(255,255,255,0.35);display:flex;align-items:center;justify-content:center;font-size:19px;box-shadow:0 4px 16px ${p.shadow}">${p.emoji}</div><div style="width:2px;height:9px;background:rgba(255,255,255,0.3)"></div></div>`,
         iconSize:[44,62],iconAnchor:[22,62],className:''
       });
       const mk=L.marker([u.latitude,u.longitude],{icon:ic}).addTo(map);
@@ -145,15 +158,6 @@ async function loadMapUsers(){
       mk.on('click',()=>userCard(u));
     });
   }catch(e){console.error('loadMapUsers:',e);}
-}
-
-async function loadMC(){
-  if(!me)return;
-  try{
-    const r=await fetch(API+'/api/matches/'+me.telegram_id);
-    const m=await r.json();
-    document.getElementById('mc').textContent=Array.isArray(m)?m.length:0;
-  }catch(e){console.error('loadMC:',e);}
 }
 
 function pins(){
@@ -166,25 +170,24 @@ function pins(){
     mk._p=true;
     mk.on('click',()=>detail(a));
   });
+  drawMyPin();
   loadMapUsers();
 }
 
 function userCard(u){
-  const isAdm=u.telegram_id==ADMIN_ID;
-  const isMale=u.gender==='мужской';
-  const color=isAdm?'#FFD700':isMale?'#22c55e':'#f472b6';
-  const emoji=isAdm?'👑':isMale?'👨':'👩';
-  const isMe=me&&u.telegram_id===me.telegram_id;
+  const p=pinColor(u);
+  const isMe=me&&u.telegram_id==me.telegram_id;
   document.getElementById('sb').innerHTML=`
     <div style="text-align:center;padding:4px 0 20px">
-      <div style="width:88px;height:88px;border-radius:50%;background:linear-gradient(135deg,${color}33,${color}11);display:flex;align-items:center;justify-content:center;font-size:44px;margin:0 auto 14px;border:2px solid ${color}66">${emoji}</div>
+      <div style="width:88px;height:88px;border-radius:50%;background:linear-gradient(135deg,${p.color}33,${p.color}11);display:flex;align-items:center;justify-content:center;font-size:44px;margin:0 auto 14px;border:2px solid ${p.color}66">${p.emoji}</div>
       <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:22px">${esc(u.name)}</div>
       <div style="color:#555577;margin-top:6px;font-size:14px">${u.age} лет · ${esc(u.city||'Бишкек')}</div>
       ${u.current_status?`<div style="margin-top:10px;background:rgba(255,255,255,0.05);border-radius:12px;padding:8px 14px;font-size:13px;color:#aaa">💬 ${esc(u.current_status)}</div>`:''}
       ${u.about?`<div style="margin-top:10px;font-size:13px;color:#888;line-height:1.5">${esc(u.about)}</div>`:''}
-      ${isAdm?`<div style="margin-top:8px;font-size:12px;color:#FFD700">👑 Основатель ConnectKG</div>`:''}
+      ${u.telegram_id==ADMIN_ID?`<div style="margin-top:8px;font-size:12px;color:#FFD700">👑 Основатель ConnectKG</div>`:''}
     </div>
-    ${!isMe?`<button class="btn" onclick='openChat(${JSON.stringify(u)})'>Написать 💬</button>`:''}
+    ${!isMe?`<button class="btn" onclick='openChat(${JSON.stringify(u).replace(/'/g,"&#39;")})'>Написать 💬</button>`:''}
+    ${isMe?`<button class="btn" onclick="openAdd()">Обновить статус ✨</button>`:''}
     <button class="btn-sec" onclick="closeSheet()">Закрыть</button>
   `;
   openSheet();
@@ -193,7 +196,7 @@ function userCard(u){
 async function openChat(u){
   chatWith=u;
   if(chatInterval)clearInterval(chatInterval);
-  document.getElementById('sb').innerHTML=renderChatShell(u)+loader();
+  document.getElementById('sb').innerHTML=chatShell(u)+loader();
   openSheet();
   const msgs=await loadMsgs(u.telegram_id);
   renderChatFull(u,msgs);
@@ -202,30 +205,29 @@ async function openChat(u){
     const m=await loadMsgs(chatWith.telegram_id);
     const box=document.getElementById('chat-msgs');
     if(!box)return;
-    const wasAtBottom=box.scrollHeight-box.scrollTop-box.clientHeight<40;
+    const atBottom=box.scrollHeight-box.scrollTop-box.clientHeight<50;
     box.innerHTML=msgsHtml(m);
-    if(wasAtBottom)box.scrollTop=box.scrollHeight;
+    if(atBottom)box.scrollTop=box.scrollHeight;
   },3000);
 }
 
-function renderChatShell(u){
-  const isMale=u.gender==='мужской';
-  const emoji=isMale?'👨':'👩';
+function chatShell(u){
+  const p=pinColor(u);
   return`<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.07)">
-    <span style="font-size:28px">${emoji}</span>
+    <span style="font-size:28px">${p.emoji}</span>
     <div><div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px">${esc(u.name)}</div><div style="font-size:12px;color:#555577">${u.age} лет</div></div>
     <button onclick="closeSheet()" style="margin-left:auto;background:none;border:none;color:#555577;font-size:22px;cursor:pointer">✕</button>
   </div>`;
 }
 
 function msgsHtml(msgs){
-  if(!msgs.length)return'<div style="text-align:center;color:#555577;font-size:13px;padding:20px">Начни общение первым! 👋</div>';
+  if(!msgs||!msgs.length)return'<div style="text-align:center;color:#555577;font-size:13px;padding:20px">Начни общение первым! 👋</div>';
   return msgs.map(m=>`<div class="${m.from_id==me?.telegram_id?'msg-out':'msg-in'}">${esc(m.text)}</div>`).join('');
 }
 
 function renderChatFull(u,msgs){
   document.getElementById('sb').innerHTML=`
-    ${renderChatShell(u)}
+    ${chatShell(u)}
     <div class="chat-msgs" id="chat-msgs">${msgsHtml(msgs)}</div>
     <div class="chat-row">
       <input id="chat-inp" placeholder="Сообщение..." onkeydown="if(event.key==='Enter')sendMsg()"/>
@@ -251,18 +253,56 @@ async function sendMsg(){
   const inp=document.getElementById('chat-inp');
   const text=inp?.value?.trim();
   if(!text)return;
-  sending=true;
-  inp.value='';
-  inp.disabled=true;
+  sending=true;inp.value='';inp.disabled=true;
   try{
     await fetch(API+'/api/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from_id:me.telegram_id,to_id:chatWith.telegram_id,text})});
     const msgs=await loadMsgs(chatWith.telegram_id);
     const box=document.getElementById('chat-msgs');
     if(box){box.innerHTML=msgsHtml(msgs);box.scrollTop=box.scrollHeight;}
   }catch(e){toast('Ошибка отправки');console.error(e);}
-  inp.disabled=false;
-  inp.focus();
-  sending=false;
+  inp.disabled=false;inp.focus();sending=false;
+}
+
+async function openAIChat(){
+  if(chatInterval)clearInterval(chatInterval);
+  chatWith=null;
+  const aiBro={name:'AI-бро',age:'∞',gender:'мужской',telegram_id:'ai',city:'ConnectKG',about:'Помогу найти пару и посоветую места в Бишкеке'};
+  document.getElementById('sb').innerHTML=`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.07)">
+      <span style="font-size:28px">🤖</span>
+      <div><div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px">AI-бро ConnectKG</div><div style="font-size:12px;color:#22c55e">● онлайн</div></div>
+      <button onclick="closeSheet()" style="margin-left:auto;background:none;border:none;color:#555577;font-size:22px;cursor:pointer">✕</button>
+    </div>
+    <div class="chat-msgs" id="ai-msgs"><div class="msg-in">Привет! Я AI-бро ConnectKG 🤖 Помогу с анкетой, посоветую места для свиданий в Бишкеке. Что подсказать?</div></div>
+    <div class="chat-row">
+      <input id="ai-inp" placeholder="Спроси что-нибудь..." onkeydown="if(event.key==='Enter')sendAI()"/>
+      <button onclick="sendAI()">➤</button>
+    </div>
+  `;
+  openSheet();
+}
+
+let aiSending=false;
+async function sendAI(){
+  if(aiSending)return;
+  const inp=document.getElementById('ai-inp');
+  const text=inp?.value?.trim();
+  if(!text)return;
+  aiSending=true;inp.value='';inp.disabled=true;
+  const box=document.getElementById('ai-msgs');
+  if(box)box.innerHTML+=`<div class="msg-out">${esc(text)}</div><div class="msg-in" id="ai-typing">...</div>`;
+  if(box)box.scrollTop=box.scrollHeight;
+  try{
+    const r=await fetch(API+'/api/ai-support',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,user_id:me?.telegram_id})});
+    const d=await r.json();
+    const typing=document.getElementById('ai-typing');
+    if(typing)typing.textContent=d.reply||'Не могу ответить сейчас.';
+  }catch(e){
+    const typing=document.getElementById('ai-typing');
+    if(typing)typing.textContent='Ошибка соединения. Попробуй ещё раз.';
+  }
+  if(box)box.scrollTop=box.scrollHeight;
+  inp.disabled=false;inp.focus();aiSending=false;
 }
 
 function detail(a){
@@ -273,144 +313,4 @@ function detail(a){
     <div style="text-align:center;padding:4px 0 24px">
       <div style="width:76px;height:76px;background:${t.c}22;border-radius:22px;display:flex;align-items:center;justify-content:center;font-size:38px;margin:0 auto 14px">${t.i}</div>
       <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:19px">${esc(a.title)}</div>
-      ${a.description?`<div style="color:#555577;margin-top:8px;font-size:14px">${esc(a.description)}</div>`:''}
-      <div style="display:inline-block;background:rgba(255,109,0,0.1);border:1px solid rgba(255,109,0,0.25);border-radius:20px;padding:6px 14px;font-size:12px;color:#ff6d00;font-weight:600;margin-top:12px">⏱ Через ${ts}</div>
-    </div>
-    <button class="btn" onclick="closeSheet()">Присоединиться 🙌</button>
-  `;
-  openSheet();
-}
-
-function openAdd(){
-  const ps=Object.keys(T).map(k=>`<div class="pill ${k===selType?'on':''}" onclick="pickType('${k}',this)">${T[k].i} ${k}</div>`).join('');
-  document.getElementById('sb').innerHTML=`
-    <div class="h">Мой статус ✨</div>
-    <div class="pills">${ps}</div>
-    <input class="inp" id="ad" placeholder="Что делаешь? Где находишься?"/>
-    <button class="btn" onclick="postStatus()">Опубликовать 🚀</button>
-  `;
-  openSheet();
-}
-
-function pickType(t,el){selType=t;document.querySelectorAll('.pill').forEach(p=>p.classList.remove('on'));el.classList.add('on');}
-
-async function postStatus(){
-  if(!me){tg?.showAlert?.('Зарегистрируйся через @Connectkgbot');return;}
-  const d=document.getElementById('ad')?.value?.trim()||'';
-  const status=d||selType;
-  const btn=document.querySelector('#sb .btn');
-  if(btn){btn.disabled=true;btn.textContent='Публикуем...';}
-  try{
-    await fetch(API+'/api/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:me.telegram_id,status})});
-    await fetch(API+'/api/activities',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:me.telegram_id,title:selType,description:d,latitude:myLat,longitude:myLng})});
-    me.current_status=status;
-    closeSheet();
-    loadActs();
-    toast('Статус обновлён! 🚀');
-  }catch(e){toast('Ошибка. Попробуй ещё раз');console.error(e);}
-}
-
-function openSheet(){document.getElementById('sheet').classList.add('up');document.getElementById('ov').classList.add('on');}
-function closeSheet(){
-  document.getElementById('sheet').classList.remove('up');
-  document.getElementById('ov').classList.remove('on');
-  if(chatInterval){clearInterval(chatInterval);chatInterval=null;chatWith=null;}
-}
-
-function go(tab){
-  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
-  document.getElementById('nb-'+tab)?.classList.add('on');
-  if(tab==='meets')meets();
-  else if(tab==='matches')matches();
-  else if(tab==='profile')profile();
-  else closeSheet();
-}
-
-function meets(){
-  const html=acts.length?acts.map(a=>{
-    const t=T[a.title]||T['Другое'];
-    const mins=Math.max(0,Math.floor((new Date(a.expires_at)-Date.now())/60000));
-    return`<div class="item" onclick="map.setView([${a.latitude||42.87},${a.longitude||74.57}],16);closeSheet()">
-      <div class="ico" style="background:${t.c}22">${t.i}</div>
-      <div style="flex:1">
-        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px">${esc(a.title)}</div>
-        ${a.description?`<div style="font-size:12px;color:#555577;margin-top:2px">${esc(a.description)}</div>`:''}
-        <div style="font-size:11px;color:#ff6d00;margin-top:4px;font-weight:600">⏱ ${mins>60?Math.floor(mins/60)+' ч.':mins+' мин.'}</div>
-      </div>
-    </div>`;
-  }).join(''):`<div class="empty"><div class="ei">🌃</div><div class="et">Пока тихо</div><div class="es">Будь первым — поставь статус!</div></div>`;
-  document.getElementById('sb').innerHTML=`<div class="h">Активности рядом</div>${html}`;
-  openSheet();
-}
-
-async function matches(){
-  if(!me){
-    document.getElementById('sb').innerHTML=`<div class="empty"><div class="ei">💌</div><div class="et">Войди через бота</div><div class="es">@Connectkgbot</div></div>`;
-    openSheet();return;
-  }
-  document.getElementById('sb').innerHTML=`<div class="h">Твои матчи ❤️</div>${loader()}`;
-  openSheet();
-  try{
-    const r=await fetch(API+'/api/matches/'+me.telegram_id);
-    const ms=await r.json();
-    const html=Array.isArray(ms)&&ms.length?ms.map(m=>`
-      <div class="item" onclick='openChat(${JSON.stringify(m.partner)})'>
-        <div class="ico" style="background:rgba(255,23,68,0.1)">${m.partner?.gender==='мужской'?'👨':'👩'}</div>
-        <div style="flex:1">
-          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px">${esc(m.partner?.name||'?')}</div>
-          <div style="font-size:12px;color:#555577">${m.partner?.age} лет · ${esc(m.partner?.city||'')}</div>
-        </div>
-        <div style="color:#ff1744;font-size:13px;font-weight:700">Чат 💬</div>
-      </div>`).join('')
-    :`<div class="empty"><div class="ei">💌</div><div class="et">Пока нет матчей</div><div class="es">Лайкай анкеты в боте!</div></div>`;
-    document.getElementById('sb').innerHTML=`<div class="h">Твои матчи ❤️</div>${html}`;
-  }catch(e){toast('Ошибка загрузки');console.error(e);}
-}
-
-function profile(){
-  const html=me?`
-    <div style="text-align:center;padding:4px 0 24px">
-      <div style="width:88px;height:88px;background:linear-gradient(135deg,rgba(255,23,68,0.15),rgba(255,109,0,0.15));border-radius:26px;display:flex;align-items:center;justify-content:center;font-size:42px;margin:0 auto 16px">${me.telegram_id==ADMIN_ID?'👑':me.gender==='мужской'?'👨':'👩'}</div>
-      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:21px">${esc(me.name)}</div>
-      <div style="color:#555577;margin-top:6px">${me.age} лет · ${esc(me.city||'')}</div>
-      ${me.current_status?`<div style="margin-top:10px;background:rgba(255,255,255,0.05);border-radius:12px;padding:8px 14px;font-size:13px">💬 ${esc(me.current_status)}</div>`:''}
-    </div>
-    <button class="btn" onclick="openAdd()">Обновить статус ✨</button>
-    <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:16px;text-align:center">
-      <div style="font-size:12px;color:#555577;margin-bottom:6px">🔔 Канал</div>
-      <a href="https://t.me/connectkg_chanal" style="color:#4facfe;font-weight:700;font-size:14px;text-decoration:none">@connectkg_chanal</a>
-    </div>`
-  :`<div class="empty"><div class="ei">👤</div><div class="et">Нет профиля</div><div class="es">Зарегистрируйся через @Connectkgbot</div></div>`;
-  document.getElementById('sb').innerHTML=`<div class="h">Профиль</div>${html}`;
-  openSheet();
-}
-
-navigator.geolocation.getCurrentPosition(async p=>{
-  myLat=p.coords.latitude;
-  myLng=p.coords.longitude;
-  map.setView([myLat,myLng],15);
-  await loadUser();
-  const isAdm=me&&me.telegram_id==ADMIN_ID;
-  const isMale=me&&me.gender==='мужской';
-  const color=isAdm?'#FFD700':isMale?'#22c55e':'#f472b6';
-  const shadow=isAdm?'rgba(255,215,0,0.6)':isMale?'rgba(34,197,94,0.5)':'rgba(244,114,182,0.5)';
-  const emoji=isAdm?'👑':isMale?'👨':'👩';
-  const ic=L.divIcon({
-    html:`<div style="position:relative;display:flex;flex-direction:column;align-items:center">
-      <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,${color},${color}99);border:3px solid rgba(255,255,255,0.5);display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 0 0 4px ${shadow},0 4px 20px ${shadow}">${emoji}</div>
-      <div style="width:2px;height:10px;background:rgba(255,255,255,0.4)"></div>
-    </div>`,
-    iconSize:[44,60],iconAnchor:[22,60],className:''
-  });
-  const mk=L.marker([myLat,myLng],{icon:ic}).addTo(map);
-  mk._p=true;
-  mk.on('click',()=>{if(me)userCard(me);});
-},()=>{
-  loadUser();
-});
-
-loadActs();
-setInterval(loadActs,15000);
-</script>
-</body>
-</html>
+      ${a.description?`<div style="color:#555577;margin-top:8px;f
